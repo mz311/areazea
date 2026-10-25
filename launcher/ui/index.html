@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FiveM Base Launcher</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="bg" aria-hidden="true"></div>
+
+  <!-- Connexion -->
+  <main id="screen-login" class="screen center hidden">
+    <div class="card login">
+      <svg class="logo" viewBox="0 0 40 40" width="72" height="72" aria-hidden="true">
+        <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#c4a1ff"/><stop offset="1" stop-color="#7020e6"/></linearGradient></defs>
+        <rect x="2" y="2" width="36" height="36" rx="10" fill="#10101c" stroke="url(#g)" stroke-width="2"/>
+        <path d="M12 27 20 11l8 16h-5l-3-6-3 6z" fill="url(#g)"/>
+      </svg>
+      <h1>FiveM Base Launcher</h1>
+      <p class="muted">Installez et mettez à jour la base en un clic. Connectez-vous avec le compte Discord de la communauté.</p>
+      <button id="btn-login" class="btn primary big">Se connecter avec Discord</button>
+      <p id="login-wait" class="muted hidden">Terminez la connexion dans votre navigateur… <a href="#" id="btn-cancel-login">Annuler</a></p>
+      <p id="login-error" class="error hidden"></p>
+    </div>
+  </main>
+
+  <!-- Application -->
+  <main id="screen-main" class="screen hidden">
+    <header class="topbar">
+      <div class="brand">
+        <svg viewBox="0 0 40 40" width="30" height="30" aria-hidden="true"><defs><linearGradient id="g2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#c4a1ff"/><stop offset="1" stop-color="#7020e6"/></linearGradient></defs><rect x="2" y="2" width="36" height="36" rx="10" fill="#10101c" stroke="url(#g2)" stroke-width="2"/><path d="M12 27 20 11l8 16h-5l-3-6-3 6z" fill="url(#g2)"/></svg>
+        <strong>FiveM Base Launcher</strong>
+        <span id="app-version" class="muted small"></span>
+      </div>
+      <div class="user">
+        <img id="user-avatar" alt="" width="28" height="28" />
+        <span id="user-name"></span>
+        <span id="user-role" class="badge"></span>
+        <button id="btn-logout" class="btn ghost sm">Déconnexion</button>
+      </div>
+    </header>
+
+    <div id="banner" class="banner hidden"></div>
+
+    <div class="grid">
+      <section class="card">
+        <h2>Installation</h2>
+        <label class="label">Dossier de la base</label>
+        <div class="row">
+          <input id="install-dir" class="input" readonly placeholder="Aucun dossier sélectionné" />
+          <button id="btn-pick" class="btn ghost">Choisir…</button>
+        </div>
+        <div class="row gap">
+          <button id="btn-open" class="btn ghost sm">📂 Ouvrir le dossier</button>
+        </div>
+
+        <div class="versions">
+          <div><span class="muted small">Installée</span><strong id="v-installed">—</strong></div>
+          <div class="arrow">→</div>
+          <div><span class="muted small">Disponible</span><strong id="v-latest">—</strong></div>
+        </div>
+        <p id="plan-summary" class="muted small"></p>
+
+        <div id="progress" class="progress hidden">
+          <div class="row between"><span id="progress-phase">…</span><span id="progress-pct">0 %</span></div>
+          <div class="bar"><div id="bar-fill"></div></div>
+          <div class="row between small muted"><span id="progress-files"></span><span id="progress-speed"></span></div>
+          <div id="progress-current" class="small muted ellipsis"></div>
+          <button id="btn-cancel" class="btn danger sm">Annuler</button>
+        </div>
+
+        <div id="actions" class="row gap">
+          <button id="btn-main" class="btn primary big" disabled>Vérification…</button>
+          <button id="btn-repair" class="btn ghost" title="Re-vérifie tous les fichiers (SHA-256) et retélécharge ceux qui sont absents ou corrompus">🛠 Réparer mon installation</button>
+        </div>
+        <p id="result" class="result hidden"></p>
+
+        <details class="advanced">
+          <summary>Options</summary>
+          <label class="label" for="channel">Canal</label>
+          <select id="channel" class="input"><option value="STABLE">Stable</option><option value="BETA">Bêta (développeurs)</option></select>
+          <label class="label" for="protected">Fichiers protégés supplémentaires (un motif par ligne)</label>
+          <textarea id="protected" class="input" rows="3" placeholder="resources/mon-script/**&#10;**/mes-reglages.lua"></textarea>
+          <p class="muted small">Ces fichiers ne seront jamais écrasés ni supprimés. <code>server.cfg</code> et les <code>config.lua</code> sont déjà protégés par défaut.</p>
+          <button id="btn-save-options" class="btn ghost sm">Enregistrer</button>
+        </details>
+      </section>
+
+      <section class="card">
+        <h2 id="changelog-title">Nouveautés</h2>
+        <div id="changelog" class="changelog"><p class="muted">Chargement…</p></div>
+      </section>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -454,14 +454,15 @@ async fn run_apply<S: Source>(
         }
         let hashes: Vec<String> = chunk.iter().map(|(h, _)| h.clone()).collect();
         let urls = source.blob_urls(version, &hashes).await?;
-        let results: Vec<Result<()>> = stream::iter(chunk.iter())
+        // éléments possédés (et non des références) : évite une limite de rustc sur les closures async « higher-ranked »
+        let results: Vec<Result<()>> = stream::iter(chunk.to_vec())
             .map(|(sha, size)| {
-                let url = urls.get(sha).cloned();
-                let dest = staging.join(sha);
+                let url = urls.get(&sha).cloned();
+                let dest = staging.join(&sha);
                 let label = names.get(sha.as_str()).map(|s| s.to_string());
                 async move {
                     let url = url.ok_or_else(|| Error::Other(format!("aucun lien pour le blob {}…", &sha[..12])))?;
-                    download_blob(source, http, version, url, dest, sha, *size, tracker, cancel, opts.max_retries).await?;
+                    download_blob(source, http, version, url, dest, &sha, size, tracker, cancel, opts.max_retries).await?;
                     tracker.file_done(label);
                     Ok(())
                 }

@@ -1,6 +1,6 @@
 use crate::error::{Error, Result};
 use crate::manifest::{is_valid_sha256, RemoteVersion};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::future::Future;
 use std::time::Duration;
@@ -18,7 +18,7 @@ pub struct ApiClient {
     http: reqwest::Client,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Me {
     pub name: String,
