@@ -8,6 +8,7 @@ import { effectiveRole } from "../rbac";
 import { fetchRolesWithBot, computeAccess, roleConfigFromEnv } from "./discord";
 
 export const SESSION_COOKIE = "fbm_session";
+export const OAUTH_COOKIE = "fbm_oauth";
 export const SESSION_TTL_MS = 14 * 24 * 3600 * 1000;
 const ROLE_REFRESH_MS = 10 * 60 * 1000;
 

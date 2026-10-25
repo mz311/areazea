@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { computeAccess, exchangeCode, fetchOwnGuildRoles, fetchUser, roleConfigFromEnv } from "@/lib/auth/discord";
-import { cookieOptions, createSession } from "@/lib/auth/session";
+import { cookieOptions, createSession, OAUTH_COOKIE } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { env } from "@/lib/env";
 import { safeEqual, verifyPayload } from "@/lib/crypto";
 import { audit } from "@/lib/audit";
 import { clientIp } from "@/lib/api";
 import { safeReturnTo } from "@/lib/redirect";
-import { OAUTH_COOKIE } from "../login/route";
 
 export const runtime = "nodejs";
 

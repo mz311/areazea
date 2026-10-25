@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "node:crypto";
 import { authorizeUrl } from "@/lib/auth/discord";
-import { cookieOptions } from "@/lib/auth/session";
+import { cookieOptions, OAUTH_COOKIE } from "@/lib/auth/session";
 import { env } from "@/lib/env";
 import { randomToken, signPayload } from "@/lib/crypto";
 import { clientIp } from "@/lib/api";
@@ -9,7 +9,6 @@ import { rateLimit } from "@/lib/rate-limit";
 import { safeReturnTo } from "@/lib/redirect";
 
 export const runtime = "nodejs";
-export const OAUTH_COOKIE = "fbm_oauth";
 
 export async function GET(req: NextRequest) {
   const rl = rateLimit(`login:${clientIp(req)}`, 30, 10 * 60_000);
