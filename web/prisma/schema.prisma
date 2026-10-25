@@ -1,0 +1,176 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  MEMBER
+  VIP
+  DEVELOPER
+  ADMIN
+}
+
+enum Channel {
+  STABLE
+  BETA
+}
+
+enum VersionStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum ChangeType {
+  NEW
+  FIX
+  IMPROVEMENT
+}
+
+enum AnnouncementKind {
+  NEWS
+  MAINTENANCE
+  NEW_RESOURCE
+}
+
+model User {
+  id             String          @id @default(cuid())
+  discordId      String          @unique
+  username       String
+  globalName     String?
+  avatar         String?
+  /// Rôle calculé depuis les rôles Discord à chaque connexion / rafraîchissement.
+  role           Role            @default(MEMBER)
+  /// Surcharge manuelle par un administrateur (prioritaire sur `role`).
+  roleOverride   Role?
+  inGuild        Boolean         @default(false)
+  banned         Boolean         @default(false)
+  rolesCheckedAt DateTime?
+  createdAt      DateTime        @default(now())
+  lastLoginAt    DateTime        @default(now())
+  sessions       Session[]
+  tokens         LauncherToken[]
+  downloads      Download[]
+  auditLogs      AuditLog[]
+  versions       Version[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  userAgent String?
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model LauncherToken {
+  id         String    @id @default(cuid())
+  tokenHash  String    @unique
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+
+  @@index([userId])
+}
+
+model Version {
+  id            String        @id @default(cuid())
+  version       String        @unique
+  channel       Channel       @default(STABLE)
+  status        VersionStatus @default(DRAFT)
+  title         String?
+  summary       String?
+  minRole       Role          @default(MEMBER)
+  /// Version vers laquelle le launcher synchronise son canal (une seule par canal).
+  isCurrent     Boolean       @default(false)
+  /// { files: [{path, sha256, size}], managedDirs: string[], protected: string[] }
+  manifest      Json
+  fileCount     Int
+  totalSize     BigInt
+  archiveKey    String?
+  archiveSha256 String?
+  archiveSize   BigInt?
+  createdAt     DateTime      @default(now())
+  publishedAt   DateTime?
+  createdById   String?
+  createdBy     User?         @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  changes       Change[]
+  downloads     Download[]
+
+  @@index([status, channel])
+}
+
+model Change {
+  id        String     @id @default(cuid())
+  versionId String
+  version   Version    @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  type      ChangeType
+  text      String
+  imageId   String?
+  position  Int        @default(0)
+
+  @@index([versionId])
+}
+
+model MediaAsset {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  mime        String
+  size        Int
+  createdAt   DateTime @default(now())
+  createdById String?
+}
+
+model Download {
+  id        String   @id @default(cuid())
+  versionId String
+  version   Version  @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  /// ZIP | INSTALL | UPDATE | REPAIR
+  kind      String
+  createdAt DateTime @default(now())
+
+  @@index([versionId])
+  @@index([createdAt])
+}
+
+model Announcement {
+  id          String           @id @default(cuid())
+  kind        AnnouncementKind @default(NEWS)
+  title       String
+  body        String
+  pinned      Boolean          @default(false)
+  discordSent Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  createdById String?
+}
+
+model Setting {
+  key   String @id
+  value Json
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  actor     User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action    String
+  target    String?
+  meta      Json?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
