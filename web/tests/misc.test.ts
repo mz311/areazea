@@ -55,3 +55,42 @@ describe("rate limit", () => {
     expect(rateLimit("other", 2, 1000, 20).ok).toBe(true);
   });
 });
+
+import { computeAccess } from "@/lib/auth/discord";
+import { sniffImage } from "@/lib/image";
+import { safeReturnTo } from "@/lib/redirect";
+
+describe("rôles Discord → rôles applicatifs", () => {
+  const cfg = { member: [], vip: ["v1", "v2"], developer: ["d1"], admin: ["a1"], adminUserIds: ["boss"] };
+  it("hiérarchie et plus haut rôle gagnant", () => {
+    expect(computeAccess(cfg, "u", [])).toEqual({ inGuild: true, role: "MEMBER" });
+    expect(computeAccess(cfg, "u", ["v2"])).toEqual({ inGuild: true, role: "VIP" });
+    expect(computeAccess(cfg, "u", ["v1", "d1"]).role).toBe("DEVELOPER");
+    expect(computeAccess(cfg, "u", ["v1", "d1", "a1"]).role).toBe("ADMIN");
+  });
+  it("hors serveur = pas d'accès ; admin d'amorçage reste admin", () => {
+    expect(computeAccess(cfg, "u", null)).toEqual({ inGuild: false, role: "MEMBER" });
+    expect(computeAccess(cfg, "boss", [])).toEqual({ inGuild: true, role: "ADMIN" });
+  });
+  it("rôle « membre vérifié » exigé quand il est configuré", () => {
+    const strict = { ...cfg, member: ["m1"] };
+    expect(computeAccess(strict, "u", []).inGuild).toBe(false);
+    expect(computeAccess(strict, "u", ["m1"]).inGuild).toBe(true);
+    expect(computeAccess(strict, "u", ["v1"]).inGuild).toBe(true); // un VIP est forcément vérifié
+  });
+});
+
+describe("garde-fous divers", () => {
+  it("safeReturnTo bloque les redirections ouvertes", () => {
+    expect(safeReturnTo("/download")).toBe("/download");
+    for (const bad of ["//evil.com", "https://evil.com", "/\\evil.com", "javascript:alert(1)", "", null, undefined, "/a\u0000b"]) {
+      expect(safeReturnTo(bad as string)).toBe("/download");
+    }
+  });
+  it("sniffImage identifie par signature et refuse SVG/HTML", () => {
+    expect(sniffImage(Buffer.from("89504e470d0a1a0a0000000d49484452", "hex"))).toBe("image/png");
+    expect(sniffImage(Buffer.from("ffd8ffe000104a464946", "hex"))).toBe("image/jpeg");
+    expect(sniffImage(Buffer.from("<svg xmlns='http://www.w3.org/2000/svg'></svg>"))).toBeNull();
+    expect(sniffImage(Buffer.from("<html><script>alert(1)</script></html>"))).toBeNull();
+  });
+});

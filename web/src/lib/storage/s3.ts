@@ -19,17 +19,24 @@ export interface S3Options {
   accessKeyId: string;
   secretAccessKey: string;
   forcePathStyle: boolean;
+  /** Endpoint joignable par les navigateurs / launchers pour les liens présignés (si différent de `endpoint`). */
+  publicEndpoint?: string;
 }
 
 export class S3Storage implements Storage {
   private client: S3Client;
+  /** Client servant uniquement à signer : l'hôte fait partie de la signature, il doit être l'hôte public. */
+  private signer: S3Client;
   constructor(private o: S3Options) {
-    this.client = new S3Client({
-      region: o.region,
-      endpoint: o.endpoint,
-      forcePathStyle: o.forcePathStyle,
-      credentials: { accessKeyId: o.accessKeyId, secretAccessKey: o.secretAccessKey },
-    });
+    const make = (endpoint?: string) =>
+      new S3Client({
+        region: o.region,
+        endpoint,
+        forcePathStyle: o.forcePathStyle,
+        credentials: { accessKeyId: o.accessKeyId, secretAccessKey: o.secretAccessKey },
+      });
+    this.client = make(o.endpoint);
+    this.signer = o.publicEndpoint ? make(o.publicEndpoint) : this.client;
   }
 
   async putFile(key: string, filePath: string, contentType?: string) {
@@ -85,7 +92,7 @@ export class S3Storage implements Storage {
 
   async signedUrl(key: string, opts: { expiresIn: number; filename?: string; contentType?: string }) {
     return getSignedUrl(
-      this.client,
+      this.signer,
       new GetObjectCommand({
         Bucket: this.o.bucket,
         Key: key,

@@ -1,0 +1,31 @@
+name: Release launcher (Windows)
+# Publier : git tag launcher-v1.0.0 && git push --tags
+# Définir la variable de dépôt FBM_API_URL (ex. https://base.example.com) : l'URL du site est compilée dans le launcher.
+on:
+  push:
+    tags: ["launcher-v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults: { run: { working-directory: launcher } }
+    env:
+      FBM_API_URL: ${{ vars.FBM_API_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: launcher/package-lock.json }
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: launcher }
+      - run: npm ci
+      - name: Vérifier l'URL du site
+        shell: bash
+        run: test -n "$FBM_API_URL" && [[ "$FBM_API_URL" == https://* ]] || (echo "Définissez la variable FBM_API_URL en https://" && exit 1)
+      - run: cargo test -p fbm-core
+      - run: npx tauri build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FiveM-Base-Launcher-Setup
+          path: launcher/target/release/bundle/nsis/*.exe

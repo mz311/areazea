@@ -1,0 +1,45 @@
+# Déploiement complet : PostgreSQL + migrations + site. Stockage local (volume `storage`) par défaut ;
+# pour S3/R2, renseignez STORAGE_DRIVER=s3 et S3_* dans web/.env.
+#   cp web/.env.example web/.env   (puis éditer)
+#   docker compose up -d --build
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fbm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      POSTGRES_DB: fbm
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fbm -d fbm"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    build: { context: ./web, target: builder }
+    command: npx prisma migrate deploy
+    environment:
+      DATABASE_URL: postgresql://fbm:${POSTGRES_PASSWORD:-change-me}@db:5432/fbm
+    depends_on:
+      db: { condition: service_healthy }
+
+  web:
+    build: { context: ./web, target: runner }
+    restart: unless-stopped
+    env_file: ./web/.env
+    environment:
+      DATABASE_URL: postgresql://fbm:${POSTGRES_PASSWORD:-change-me}@db:5432/fbm
+      STORAGE_LOCAL_DIR: /data
+    volumes:
+      - storage:/data
+    ports:
+      - "127.0.0.1:3000:3000" # exposez-le via un reverse proxy HTTPS (voir deploy/nginx.conf)
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+volumes:
+  pgdata:
+  storage:

@@ -1,3 +1,6 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 const csp = [
   "default-src 'self'",
   "img-src 'self' data: https://cdn.discordapp.com https:",
@@ -12,6 +15,8 @@ const csp = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
+  // sans ceci, Next remonte au dossier parent (monorepo) et imbrique la sortie standalone
+  outputFileTracingRoot: path.dirname(fileURLToPath(import.meta.url)),
   poweredByHeader: false,
   serverExternalPackages: ["@prisma/client", "yauzl"],
   async headers() {

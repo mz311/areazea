@@ -38,6 +38,8 @@ const schema = z.object({
   STORAGE_DRIVER: z.enum(["local", "s3"]).default("local"),
   STORAGE_LOCAL_DIR: z.string().default("./storage-data"),
   S3_ENDPOINT: z.string().optional(),
+  /** Endpoint S3 accessible depuis Internet pour les liens présignés (ex. https://s3.mondomaine.tld). Défaut : S3_ENDPOINT. */
+  S3_PUBLIC_ENDPOINT: z.string().optional(),
   S3_REGION: z.string().default("auto"),
   S3_BUCKET: z.string().optional(),
   S3_ACCESS_KEY_ID: z.string().optional(),
@@ -66,10 +68,15 @@ let cached: Env | undefined;
 
 export function env(): Env {
   if (!cached) {
-    const parsed = schema.safeParse(process.env);
+    // une variable présente mais vide (ex. `DISCORD_BOT_TOKEN=` dans .env) équivaut à « non définie »
+    const raw = Object.fromEntries(Object.entries(process.env).filter(([, v]) => v !== undefined && v !== ""));
+    const parsed = schema.safeParse(raw);
     if (!parsed.success) {
       const issues = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("\n");
       throw new Error(`Configuration invalide (.env) :\n${issues}`);
+    }
+    if (parsed.data.NODE_ENV === "production" && /changez-moi|change-me/i.test(parsed.data.APP_SECRET)) {
+      throw new Error("APP_SECRET est encore la valeur d'exemple : générez-en une avec `openssl rand -base64 48`");
     }
     cached = parsed.data;
   }

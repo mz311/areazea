@@ -1,0 +1,42 @@
+name: CI
+on:
+  push:
+  pull_request:
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_USER: fbm, POSTGRES_PASSWORD: fbm, POSTGRES_DB: fbm_test }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U fbm" --health-interval 5s --health-timeout 3s --health-retries 20
+    defaults: { run: { working-directory: web } }
+    env:
+      DATABASE_URL: postgresql://fbm:fbm@localhost:5432/fbm_test
+      APP_SECRET: ci-secret-ci-secret-ci-secret-ci-secret
+      DISCORD_CLIENT_ID: "1"
+      DISCORD_CLIENT_SECRET: x
+      DISCORD_GUILD_ID: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: web/package-lock.json }
+      - run: npm ci
+      - run: npx prisma migrate deploy
+      - run: npx tsc --noEmit
+      - run: npm test
+      - run: npm run test:e2e
+      - run: npm run build
+
+  launcher-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: launcher }
+      - run: cargo test -p fbm-core
+        working-directory: launcher

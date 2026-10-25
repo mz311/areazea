@@ -21,6 +21,7 @@ export function storage(): Storage {
       accessKeyId: e.S3_ACCESS_KEY_ID,
       secretAccessKey: e.S3_SECRET_ACCESS_KEY,
       forcePathStyle: e.S3_FORCE_PATH_STYLE,
+      publicEndpoint: e.S3_PUBLIC_ENDPOINT,
     });
   } else {
     g.storage = new LocalStorage(e.STORAGE_LOCAL_DIR, e.APP_SECRET, e.APP_URL);

@@ -24,7 +24,6 @@ export function authorizeUrl(state: string, challenge: string): string {
   u.searchParams.set("state", state);
   u.searchParams.set("code_challenge", challenge);
   u.searchParams.set("code_challenge_method", "S256");
-  u.searchParams.set("prompt", "none");
   return u.toString();
 }
 

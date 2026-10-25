@@ -12,6 +12,17 @@ import { createHash } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { makeZip, makeZipWithRawName } from "../helpers";
 
+/** E2E_S3=1 : utilise un serveur S3 compatible (ex. `moto_server -p 5555`) au lieu du stockage local. */
+const S3 = process.env.E2E_S3 === "1";
+const S3_ENV = {
+  STORAGE_DRIVER: "s3",
+  S3_ENDPOINT: process.env.E2E_S3_ENDPOINT ?? "http://127.0.0.1:5555",
+  S3_BUCKET: process.env.E2E_S3_BUCKET ?? "fbm-test",
+  S3_ACCESS_KEY_ID: "test",
+  S3_SECRET_ACCESS_KEY: "test",
+  S3_REGION: "us-east-1",
+  S3_FORCE_PATH_STYLE: "true",
+};
 const PORT = 3111;
 const BASE = `http://localhost:${PORT}`;
 const DB = process.env.TEST_DATABASE_URL ?? "postgresql://fbm:fbm@localhost:5432/fbm_test";
@@ -78,8 +89,7 @@ beforeAll(async () => {
       DISCORD_CLIENT_SECRET: "x",
       DISCORD_GUILD_ID: "2",
       ADMIN_DISCORD_IDS: "999999999999999999",
-      STORAGE_DRIVER: "local",
-      STORAGE_LOCAL_DIR: storageDir,
+      ...(S3 ? S3_ENV : { STORAGE_DRIVER: "local", STORAGE_LOCAL_DIR: storageDir }),
       MAX_UPLOAD_MB: "20",
       NEXT_TELEMETRY_DISABLED: "1",
     },
@@ -221,10 +231,15 @@ describe("upload, publication, téléchargement", () => {
     const body = Buffer.from(await file.arrayBuffer());
     expect(sha(body)).toBe(r.json.sha256);
     expect(body.length).toBe(r.json.size);
-    // lien altéré
-    const tampered = r.json.url.replace(/.$/, (c: string) => (c === "A" ? "B" : "A"));
-    expect((await fetch(tampered)).status).toBe(403);
-    expect((await fetch(BASE + "/api/files/garbage")).status).toBe(403);
+    if (!S3) {
+      // lien HMAC altéré (en mode S3 la signature est vérifiée par le bucket, pas par l'application)
+      const tampered = r.json.url.replace(/.$/, (c: string) => (c === "A" ? "B" : "A"));
+      expect((await fetch(tampered)).status).toBe(403);
+      expect((await fetch(BASE + "/api/files/garbage")).status).toBe(403);
+    } else {
+      expect(r.json.url).toMatch(/X-Amz-Signature=/); // lien présigné S3
+      expect(r.json.url).toMatch(/X-Amz-Expires=300/);
+    }
     expect((await api("GET", "/api/public/latest")).json.downloads).toBe(1);
   });
 
