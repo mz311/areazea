@@ -2,8 +2,8 @@
 """
 Test bout-en-bout du launcher contre un VRAI serveur (Next.js + PostgreSQL + stockage local).
 
-Prérequis : PostgreSQL avec une base vide `fbm_launcher_e2e` (droits pour l'utilisateur fbm), `npm run build` dans web/,
-`cargo build --release -p fbm-core --bin fbm-cli` dans launcher/.
+Prérequis : PostgreSQL avec une base vide `fbm_launcher_e2e` (droits pour l'utilisateur fbm) et
+`cargo build --release -p fbm-core --bin fbm-cli` dans launcher/ (le build de web/ est fait au besoin).
 
     python3 launcher/e2e/run.py
 """
@@ -76,6 +76,9 @@ def cli(*args, token, expect_ok=True):
 
 # ── base de données + serveur ──────────────────────────────────────────────
 env = {**os.environ, "DATABASE_URL": DB}
+if not (WEB / ".next/BUILD_ID").exists():
+    print("Build de production absent : npx next build …")
+    subprocess.run(["npx", "next", "build"], cwd=WEB, env=env, check=True, capture_output=True)
 subprocess.run(["npx", "prisma", "migrate", "deploy"], cwd=WEB, env=env, check=True, capture_output=True)
 psql('TRUNCATE "AuditLog","Download","Change","Version","Session","LauncherToken","Announcement","Setting","MediaAsset","User" CASCADE')
 server = subprocess.Popen(

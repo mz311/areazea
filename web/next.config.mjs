@@ -15,6 +15,8 @@ const csp = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
+  // les tests e2e (serveur de dev) utilisent NEXT_DIST_DIR pour ne pas écraser un build de production
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   // sans ceci, Next remonte au dossier parent (monorepo) et imbrique la sortie standalone
   outputFileTracingRoot: path.dirname(fileURLToPath(import.meta.url)),
   poweredByHeader: false,

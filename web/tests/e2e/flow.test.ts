@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
+import { S3Storage } from "@/lib/storage/s3";
 import { makeZip, makeZipWithRawName } from "../helpers";
 
 /** E2E_S3=1 : utilise un serveur S3 compatible (ex. `moto_server -p 5555`) au lieu du stockage local. */
@@ -70,6 +71,11 @@ async function upload(version: string, files: Record<string, string>, qs = "") {
 
 beforeAll(async () => {
   storageDir = await mkdtemp(path.join(tmpdir(), "fbm-e2e-store-"));
+  if (S3) {
+    // isolation : un bucket non vide fausserait les compteurs de blobs (dédoublonnage) et le test de GC
+    const st = new S3Storage({ endpoint: S3_ENV.S3_ENDPOINT, region: S3_ENV.S3_REGION, bucket: S3_ENV.S3_BUCKET, accessKeyId: "test", secretAccessKey: "test", forcePathStyle: true });
+    for (const key of await st.list("")) await st.delete(key);
+  }
   execSync("npx prisma migrate deploy", { env: { ...process.env, DATABASE_URL: DB }, stdio: "pipe" });
   await prisma.$executeRawUnsafe(`TRUNCATE "AuditLog","Download","Change","Version","Session","LauncherToken","Announcement","Setting","MediaAsset","User" CASCADE`);
   await seedUser("admin", "999999999999999999");
@@ -92,6 +98,7 @@ beforeAll(async () => {
       ...(S3 ? S3_ENV : { STORAGE_DRIVER: "local", STORAGE_LOCAL_DIR: storageDir }),
       MAX_UPLOAD_MB: "20",
       NEXT_TELEMETRY_DISABLED: "1",
+      NEXT_DIST_DIR: ".next-e2e",
     },
     stdio: "pipe",
     detached: true, // groupe de processus dédié : on tue next ET ses enfants à la fin
