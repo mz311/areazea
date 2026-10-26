@@ -11,6 +11,7 @@
 set -Eeuo pipefail
 
 REPO_URL="${FBM_REPO:-https://github.com/mz311/areazea.git}"
+REPO_EXPLICIT=""
 BRANCH="${FBM_BRANCH:-claude/disponibilite-neg8vu}"
 APP_DIR="${FBM_DIR:-/opt/fbm}"
 DOMAIN="${FBM_DOMAIN:-}"
@@ -35,7 +36,7 @@ parse_args() {
       --domain) DOMAIN="${2:-}"; shift 2 ;;
       --email)  EMAIL="${2:-}"; shift 2 ;;
       --branch) BRANCH="${2:-}"; shift 2 ;;
-      --repo)   REPO_URL="${2:-}"; shift 2 ;;
+      --repo)   REPO_URL="${2:-}"; REPO_EXPLICIT=1; shift 2 ;;
       --token)  GH_TOKEN="${2:-}"; shift 2 ;;
       --dir)    APP_DIR="${2:-}"; shift 2 ;;
       --yes|-y) ASSUME_YES=1; shift ;;
@@ -242,6 +243,10 @@ fetch_code() {
   if [ -d "$APP_DIR/.git" ]; then
     info "Mise à jour du code dans $APP_DIR (branche $BRANCH)…"
     if [ -z "$GH_TOKEN" ] && [ -r /etc/fbm/github-token ]; then GH_TOKEN=$(cat /etc/fbm/github-token); fi
+    if [ -n "$REPO_EXPLICIT" ] && [ "$(git -C "$APP_DIR" remote get-url origin)" != "$REPO_URL" ]; then
+      info "Le dépôt change : $REPO_URL"
+      git -C "$APP_DIR" remote set-url origin "$REPO_URL"
+    fi
     GIT_TERMINAL_PROMPT=0 git_auth -C "$APP_DIR" fetch --quiet origin "$BRANCH" || die "git fetch impossible (dépôt privé ? relancez avec --token)."
     git -C "$APP_DIR" checkout --quiet -B "$BRANCH" "origin/$BRANCH"
   else
