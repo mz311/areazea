@@ -33,6 +33,7 @@ sec=$(get_env "$W" APP_SECRET); [ "${#sec}" -ge 32 ] || fail "APP_SECRET trop co
 echo "  ✓ APP_SECRET généré (>= 32 caractères)"
 eq "$(get_env "$W" DISCORD_CLIENT_ID)" "$PLACEHOLDER_ID" "Discord : valeur provisoire"
 eq "$(get_env "$R" COMPOSE_PROJECT_NAME)" "fbm" "nom de projet compose (volumes fbm_*)"
+eq "$(get_env "$R" COMPOSE_FILE)" "docker-compose.yml:deploy/docker-compose.prod.yml" "fichiers compose par défaut (caddy inclus)"
 [ "$(get_env "$R" POSTGRES_PASSWORD | wc -c)" -ge 40 ] || fail "mot de passe PostgreSQL trop court"
 echo "  ✓ mot de passe PostgreSQL généré"
 eq "$(stat -c %a "$W")" "600" "droits du .env : 600"

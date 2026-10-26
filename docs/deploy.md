@@ -80,7 +80,7 @@ Suivez **[discord.md](discord.md)**. Valeurs à retenir pour ce déploiement :
 | Symptôme | Cause probable |
 |---|---|
 | « Les ports 80/443 sont déjà utilisés » | Image avec Apache / Plesk : `systemctl disable --now apache2 nginx`, ou réinstallez une image Ubuntu vierge |
-| HTTPS ne répond pas, `docker compose logs caddy` parle d'*ACME* ou *challenge* | DNS pas encore propagé ou ports 80/443 fermés dans le pare-feu IONOS |
+| HTTPS ne répond pas, `docker logs --tail 40 fbm-caddy-1` parle d'*ACME*, *challenge* ou *timeout* | DNS pas encore propagé ou ports 80/443 fermés dans le pare-feu IONOS |
 | Construction qui échoue (« killed ») | Mémoire insuffisante : 2 Go minimum (le script ajoute du swap) |
 | Le site s'affiche mais « Connexion Discord » échoue | Valeurs Discord provisoires : relancez `install.sh`, vérifiez l'URL de redirection |
 | Import d'une grosse archive qui échoue | Disque plein (`df -h`) ou `MAX_UPLOAD_MB` dans `web/.env` |

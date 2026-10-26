@@ -106,6 +106,8 @@ write_env_files() {
   chmod 600 "$web_env" "$root_env"
 
   set_env "$root_env" COMPOSE_PROJECT_NAME fbm
+  # fichiers compose chargés par défaut : « docker compose logs caddy » (et toute commande compose) fonctionne dans /opt/fbm sans -f
+  set_env "$root_env" COMPOSE_FILE "docker-compose.yml:deploy/docker-compose.prod.yml"
   [ -n "$(get_env "$root_env" POSTGRES_PASSWORD)" ] || set_env "$root_env" POSTGRES_PASSWORD "$(random_hex)"
 
   set_env "$web_env" APP_URL "https://$DOMAIN"
@@ -297,7 +299,7 @@ wait_https() {
     fi
     sleep 4
   done
-  warn "https://$DOMAIN ne répond pas encore. Causes fréquentes : DNS pas encore propagé, ports 80/443 fermés dans le pare-feu IONOS. Journaux : cd $APP_DIR && docker compose logs caddy"
+  warn "https://$DOMAIN ne répond pas encore. Causes fréquentes : DNS pas encore propagé, ports 80/443 fermés dans le pare-feu IONOS. Journaux : docker logs --tail 40 fbm-caddy-1"
   return 1
 }
 
