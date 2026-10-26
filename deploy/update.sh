@@ -13,9 +13,9 @@ echo "▶ Sauvegarde de la base de données avant mise à jour"
 echo "▶ Récupération du code (branche $BRANCH)"
 if [ -r /etc/fbm/github-token ]; then
   B64=$(printf 'x-access-token:%s' "$(cat /etc/fbm/github-token)" | base64 -w0)
-  GIT_TERMINAL_PROMPT=0 git -c "http.extraheader=AUTHORIZATION: basic $B64" fetch --quiet origin "$BRANCH"
+  GIT_TERMINAL_PROMPT=0 git -c "http.extraheader=AUTHORIZATION: basic $B64" fetch --quiet origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
 else
-  GIT_TERMINAL_PROMPT=0 git fetch --quiet origin "$BRANCH"
+  GIT_TERMINAL_PROMPT=0 git fetch --quiet origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
 fi
 BEFORE=$(git rev-parse --short HEAD)
 git reset --quiet --hard "origin/$BRANCH"

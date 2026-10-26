@@ -247,13 +247,13 @@ fetch_code() {
       info "Le dépôt change : $REPO_URL"
       git -C "$APP_DIR" remote set-url origin "$REPO_URL"
     fi
-    if ! GIT_TERMINAL_PROMPT=0 git_auth -C "$APP_DIR" fetch --quiet origin "$BRANCH" 2>/dev/null; then
+    if ! GIT_TERMINAL_PROMPT=0 git_auth -C "$APP_DIR" fetch --quiet origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" 2>/dev/null; then
       if [ -z "$GH_TOKEN" ] && has_tty; then
         warn "Le dépôt semble privé. Créez un jeton GitHub en lecture seule (github.com → Settings → Developer settings → Fine-grained tokens → ce dépôt → Contents : Read-only)."
         ask GH_TOKEN "Collez le jeton GitHub (masqué)" secret || true
         valid_token "${GH_TOKEN:-x y}" || die "Jeton absent ou invalide."
       fi
-      GIT_TERMINAL_PROMPT=0 git_auth -C "$APP_DIR" fetch --quiet origin "$BRANCH" || die "git fetch impossible (dépôt privé, jeton sans accès, ou branche « $BRANCH » inexistante)."
+      GIT_TERMINAL_PROMPT=0 git_auth -C "$APP_DIR" fetch --quiet origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" || die "git fetch impossible (dépôt privé, jeton sans accès, ou branche « $BRANCH » inexistante)."
     fi
     git -C "$APP_DIR" checkout --quiet -B "$BRANCH" "origin/$BRANCH"
   else
