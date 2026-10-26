@@ -239,6 +239,22 @@ git_auth() {
   fi
 }
 
+# Explique pourquoi GitHub refuse le jeton (sans jamais l'afficher en entier)
+explain_github_refusal() {
+  local slug code
+  slug=$(printf '%s' "$REPO_URL" | sed -E 's#^https://github\.com/##; s#\.git$##')
+  if [ -z "$GH_TOKEN" ]; then warn "Aucun jeton reçu."; return; fi
+  info "Jeton reçu : ${#GH_TOKEN} caractères, commence par « ${GH_TOKEN:0:11} » (un jeton fine-grained fait environ 93 caractères et commence par github_pat_)."
+  code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/$slug" 2>/dev/null || true)
+  case "$code" in
+    200) warn "Le jeton est valide et voit le dépôt $slug : la branche « $BRANCH » n'existe peut-être pas (vérifiez le nom sur GitHub)." ;;
+    401) warn "GitHub dit : jeton invalide ou expiré (401). Il est probablement mal copié : recréez-le ou recollez-le." ;;
+    403) warn "GitHub dit : accès refusé (403). Le jeton n'a pas la permission Contents : Read-only." ;;
+    404) warn "GitHub dit : dépôt introuvable avec ce jeton (404). Dans le jeton, « Repository access » doit être « Only select repositories » avec $slug coché (pas « Public repositories »)." ;;
+    *)   warn "Réponse inattendue de GitHub (code « $code ») : pas de réseau ?" ;;
+  esac
+}
+
 fetch_code() {
   if [ -d "$APP_DIR/.git" ]; then
     info "Mise à jour du code dans $APP_DIR (branche $BRANCH)…"
@@ -253,7 +269,7 @@ fetch_code() {
         ask GH_TOKEN "Collez le jeton GitHub (masqué)" secret || true
         valid_token "${GH_TOKEN:-x y}" || die "Jeton absent ou invalide."
       fi
-      GIT_TERMINAL_PROMPT=0 git_auth -C "$APP_DIR" fetch --quiet origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" || die "git fetch impossible (dépôt privé, jeton sans accès, ou branche « $BRANCH » inexistante)."
+      GIT_TERMINAL_PROMPT=0 git_auth -C "$APP_DIR" fetch --quiet origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" 2>/dev/null || { explain_github_refusal; die "git fetch impossible (dépôt privé, jeton sans accès, ou branche « $BRANCH » inexistante)." ; }
     fi
     git -C "$APP_DIR" checkout --quiet -B "$BRANCH" "origin/$BRANCH"
   else
