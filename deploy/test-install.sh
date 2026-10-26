@@ -58,5 +58,12 @@ echo "  ✓ e-mails : « votre@email.fr~ » et injections refusés"
 valid_token "AbC_123-x.y" && valid_token "111,222" || fail "jeton valide refusé"
 if valid_token 'a b' || valid_token 'a$(x)' || valid_token 'a"b' || valid_token 'a#b'; then fail "jeton dangereux accepté"; fi
 echo "  ✓ domaines et jetons : injections refusées"
+echo "dépôt personnalisé sans fichiers de mise en ligne"
+E="$T/emptyapp"; mkdir -p "$E/deploy"; printf 'x' >"$E/deploy/nginx.conf"
+tar -czf "$T/infra.tgz" -C "$ROOT/.." --transform 's#^[^/]*#proj-main#' "$(basename "$ROOT")/deploy" 2>/dev/null
+FBM_INFRA_URL="file://$T/infra.tgz"; INFRA_URL="$FBM_INFRA_URL"; APP_DIR="$E" ensure_infra >/dev/null
+[ -f "$E/deploy/docker-compose.prod.yml" ] && [ -x "$E/deploy/update.sh" ] || fail "fichiers de mise en ligne non ajoutés"
+eq "$(cat "$E/deploy/nginx.conf")" "x" "fichier déjà présent conservé"
+echo "  ✓ docker-compose.prod.yml et scripts ajoutés"
 echo "OK : fichiers générés dans $APP_DIR (copiés vers /tmp/fbm-deploy-test pour validation)"
 rm -rf /tmp/fbm-deploy-test; mkdir -p /tmp/fbm-deploy-test; cp "$W" /tmp/fbm-deploy-test/web.env; cp "$APP_DIR/Caddyfile" /tmp/fbm-deploy-test/Caddyfile

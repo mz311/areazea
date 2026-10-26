@@ -296,6 +296,24 @@ fetch_code() {
   ok "Code récupéré : $(git -C "$APP_DIR" log -1 --format='%h %s')"
 }
 
+# Les fichiers de mise en ligne (compose de production, scripts) viennent du projet d'origine :
+# un dépôt personnalisé qui ne les contient pas les reçoit ici (les fichiers déjà présents sont conservés).
+INFRA_URL="${FBM_INFRA_URL:-https://codeload.github.com/mz311/areazea/tar.gz/refs/heads/claude/disponibilite-neg8vu}"
+ensure_infra() {
+  [ -f "$APP_DIR/deploy/docker-compose.prod.yml" ] && [ -f "$APP_DIR/deploy/update.sh" ] && return 0
+  info "Ajout des fichiers de mise en ligne manquants (deploy/)…"
+  local tmp; tmp=$(mktemp -d)
+  curl -fsSL --max-time 120 "$INFRA_URL" | tar -xz -C "$tmp" --strip-components=1 --wildcards '*/deploy/*' \
+    || { rm -rf "$tmp"; die "Impossible de télécharger les fichiers de mise en ligne ($INFRA_URL)."; }
+  mkdir -p "$APP_DIR/deploy"
+  local f
+  for f in "$tmp"/deploy/*; do [ -e "$APP_DIR/deploy/$(basename "$f")" ] || cp -r "$f" "$APP_DIR/deploy/"; done
+  rm -rf "$tmp"
+  chmod +x "$APP_DIR"/deploy/*.sh
+  [ -f "$APP_DIR/deploy/docker-compose.prod.yml" ] || die "deploy/docker-compose.prod.yml introuvable après l'ajout."
+  ok "Fichiers de mise en ligne ajoutés"
+}
+
 compose() { (cd "$APP_DIR" && docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml "$@"); }
 
 start_stack() {
@@ -377,6 +395,7 @@ main() {
   configure_firewall
   step "Code de l'application"
   fetch_code
+  ensure_infra
   step "Configuration"
   write_env_files
   write_caddyfile
