@@ -96,6 +96,14 @@ export default async function DownloadPage() {
                         <MonitorDown size={16} /> Télécharger le launcher Windows
                       </a>
                     )}
+                    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-xs text-zinc-400">
+                      <p className="mb-1 font-semibold text-zinc-200">Prêt à lancer, avec toutes les mises à jour :</p>
+                      <ol className="list-decimal space-y-0.5 pl-4">
+                        <li>Décompressez le ZIP dans le dossier de votre serveur (server.cfg inclus).</li>
+                        <li>Importez <code className="text-neon-300">sql/install.sql</code> une seule fois dans votre base de données vide (HeidiSQL, phpMyAdmin).</li>
+                        <li>Lancez le serveur. Les mises à jour suivantes : <code className="text-neon-300">fbm update</code> dans txAdmin.</li>
+                      </ol>
+                    </div>
                     <p className="text-xs text-zinc-500">Le lien de téléchargement est temporaire et signé. Vérifiez le SHA-256 après téléchargement :<br /><code className="text-zinc-400">certutil -hashfile fichier.zip SHA256</code></p>
                   </>
                 ) : (

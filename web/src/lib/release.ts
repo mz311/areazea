@@ -249,8 +249,16 @@ export async function buildInstallSql(chain: Migration[], version: string, siteN
 /** Formats déjà compressés : stockés tels quels dans le ZIP (plus rapide, aucun gain à recompresser). */
 const STORED = new Set([".ytd", ".ydr", ".yft", ".ydd", ".ybn", ".ymap", ".ytyp", ".ycd", ".rpf", ".awc", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".ogg", ".mp3", ".mp4", ".webm", ".zip", ".7z", ".rar", ".gz"]);
 
-/** Reconstruit le ZIP complet « prêt à lancer » à partir des blobs du manifeste (fichiers lus un par un). */
-export async function buildArchive(manifest: Manifest, storage: Storage): Promise<{ file: string; sha256: string; size: number; cleanup: () => Promise<void> }> {
+/**
+ * Reconstruit le ZIP complet « prêt à lancer » à partir des blobs du manifeste (fichiers lus un par un).
+ * Il contient aussi `.fbm/state.json` (hors manifeste) : un serveur installé depuis ce ZIP est reconnu par
+ * `fbm update` et le launcher comme étant en `version`, ce qui permet de supprimer proprement les fichiers obsolètes.
+ */
+export async function buildArchive(
+  manifest: Manifest,
+  storage: Storage,
+  install: { version: string; channel: string },
+): Promise<{ file: string; sha256: string; size: number; cleanup: () => Promise<void> }> {
   const dir = await mkdtemp(path.join(tmpdir(), "fbm-archive-"));
   const file = path.join(dir, "base.zip");
   const cleanup = () => rm(dir, { recursive: true, force: true });
@@ -265,6 +273,13 @@ export async function buildArchive(manifest: Manifest, storage: Storage): Promis
         );
       });
     }
+    const state = {
+      version: install.version,
+      channel: install.channel,
+      installed_at: Math.floor(Date.now() / 1000),
+      files: Object.fromEntries(manifest.files.map((f) => [f.path, { sha256: f.sha256, size: f.size }])),
+    };
+    zip.addBuffer(Buffer.from(JSON.stringify(state, null, 2)), ".fbm/state.json");
     zip.end();
     const hash = createHash("sha256");
     const tap = new Transform({

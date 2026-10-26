@@ -163,7 +163,7 @@ export function VersionsManager() {
           <div>
             <label className="label" htmlFor="pv">Version de base</label>
             <select id="pv" className="input" value={parent} onChange={(e) => setParent(e.target.value)}>
-              <option value="">Version courante du canal</option>
+              <option value="">Version courante</option>
               {versions.filter((v) => v.status === "PUBLISHED").map((v) => (
                 <option key={v.id} value={v.version}>v{v.version}{v.isCurrent ? " (courante)" : ""}</option>
               ))}

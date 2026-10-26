@@ -102,7 +102,7 @@ export const POST = route(
       const manifest = release.manifest;
 
       // ZIP complet reconstruit depuis les blobs : identique à ce qu'installe le launcher / fbm update
-      built = await buildArchive(manifest, storage());
+      built = await buildArchive(manifest, storage(), { version, channel: q.channel });
       const key = archiveKey(version, randomBytes(4).toString("hex"));
       await storage().putFile(key, built.file, "application/zip");
       const minRole = q.minRole ?? (q.channel === "BETA" ? "DEVELOPER" : "MEMBER");

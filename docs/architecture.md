@@ -30,6 +30,18 @@ Clés dans le bucket / dossier : `blobs/<2 premiers hex>/<sha256>` (un fichier d
 * `digest` = SHA-256 du JSON compact `{"files":[[path,sha,size]…],"managedDirs":[…],"protected":[…]}` ; le serveur l'envoie (`manifestSha256`) et le launcher le recalcule (la même valeur est testée côté TypeScript **et** Rust).
 * Motifs glob : `*` (sans `/`), `**` (traverse les dossiers), `?` ; insensibles à la casse (Windows).
 
+## Versions : base complète ou patch
+
+| Envoi de l'admin | Résultat |
+|---|---|
+| **Base complète** (`mode=full`) | Les fichiers de l'archive forment la base. |
+| **Patch** (`mode=patch`, `parent`) | Fichiers de la version parente − suppressions (`fbm-delete.txt` / formulaire, motifs glob ou dossiers) + fichiers du patch. |
+| `_sql/*.sql` (les deux modes) | SQL **de cette version** → `sql/migrations/<version>/<nom>.sql` ; l'historique (`manifest.migrations`) = celui de la parente + celui-ci. |
+
+Le site génère ensuite `sql/install.sql` (tout l'historique dans l'ordre + création et remplissage du registre `fbm_migrations`), puis **reconstruit le ZIP complet** depuis les blobs (avec `.fbm/state.json` pour que l'installation soit reconnue). Le ZIP téléchargé est donc toujours la base prête à lancer, quelle que soit la façon dont la version a été envoyée. `diffSummary` (ajoutés / modifiés / supprimés / ressources / SQL) alimente les patch notes.
+
+Côté serveur de jeu, `fbm update` exécute via oxmysql les entrées de `manifest.migrations` absentes du registre `fbm_migrations`, avant d'installer les fichiers au redémarrage. `GET /api/launcher/latest?from=<installée>` renvoie aussi `history` (patch notes des versions intermédiaires) et `relation` (`upgrade`, `same`, `downgrade`, `unrelated`, `install`).
+
 ## Mise à jour différentielle
 
 ```
@@ -66,7 +78,7 @@ Toutes les réponses d'erreur : `{ "error": "message", "code": "identifiant_stab
 | `POST /api/launcher/blobs` · `/report` | B | liens de téléchargement des blobs ; statistiques |
 | `GET /api/media/{id}` | — | images du changelog |
 | `GET /api/admin/versions` · `/{id}` | S admin | liste / détail + diff |
-| `POST /api/admin/versions/upload?version=&channel=&minRole=&stripRoot=` | S admin | corps brut `application/zip` (en flux) → brouillon + manifeste |
+| `POST /api/admin/versions/upload?version=&channel=&minRole=&mode=full\|patch&parent=&deletes=&stripRoot=` | S admin | corps brut `application/zip` (en flux) → fusion éventuelle, SQL, ZIP complet reconstruit → brouillon |
 | `PUT/DELETE /api/admin/versions/{id}` | S admin | changelog, règles, rôle, suppression |
 | `POST /api/admin/versions/{id}/publish` · `/rollback` | S admin | publier ; définir comme version courante |
 | `POST /api/admin/media` | S admin | upload d'image |

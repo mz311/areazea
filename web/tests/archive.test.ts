@@ -55,6 +55,12 @@ describe("processArchive", () => {
     }
   });
 
+  it("ignore le dossier .fbm/ d'un ZIP téléchargé depuis le site", async () => {
+    const zip = await makeZip({ "base/server.cfg": "x", "base/.fbm/state.json": "{}" });
+    const r = await processArchive(zip, storage, limits);
+    expect(r.files.map((f) => f.path)).toEqual(["server.cfg"]);
+  });
+
   it("refuse les extensions bloquées", async () => {
     const zip = await makeZip({ "a/run.EXE": "MZ" });
     await expect(processArchive(zip, storage, limits)).rejects.toThrow(/Extension interdite/);

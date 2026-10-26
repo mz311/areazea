@@ -28,7 +28,8 @@ Plateforme complète pour distribuer **votre base FiveM** à votre communauté D
 | [`launcher/core`](launcher/core) | Moteur de mise à jour (Rust, sans dépendance UI) + CLI `fbm-cli` + tests |
 | [`launcher/src-tauri`](launcher/src-tauri) · [`launcher/ui`](launcher/ui) | Application Tauri (Windows) |
 | [`launcher/e2e`](launcher/e2e) | Test bout-en-bout launcher ↔ vrai serveur |
-| [`fivem/fbm-updater`](fivem/fbm-updater) | Ressource FiveM : `fbm update` depuis txAdmin / en jeu ([guide](fivem/fbm-updater/README.md)) |
+| [`fivem/fbm-updater`](fivem/fbm-updater) | Ressource FiveM : `fbm update` depuis txAdmin / en jeu, SQL automatique ([guide](fivem/fbm-updater/README.md)) |
+| [`fivem/test`](fivem/test) · [`fivem/e2e`](fivem/e2e) | Tests de la ressource (harnais FiveM simulé, MariaDB réel) et parcours complet |
 | [`deploy/`](deploy) · [`docker-compose.yml`](docker-compose.yml) | nginx, Docker |
 | [`docs/`](docs) | [Discord](docs/discord.md) · [Architecture & API](docs/architecture.md) · [Sécurité](docs/security.md) · [Launcher](docs/launcher.md) |
 
@@ -58,10 +59,13 @@ npm run dev                  # http://localhost:3000
 
 ### Workflow d'administration
 
-1. **Versions → Nouvelle version** : numéro `semver` (ex. `1.2.0`), canal (stable / bêta), rôle minimum, archive ZIP. L'archive est **validée** (chemins, extensions, taille, ratio de compression), chaque fichier est stocké par **SHA-256** (les fichiers inchangés ne sont pas ré-envoyés) et le **manifeste** est généré. Le panneau indique ce que les joueurs devront télécharger (`+ajoutés ~modifiés −supprimés`).
-2. **Éditer** : titre, résumé, changelog (`NEW` / `FIX` / `IMPROVEMENT`, images), fichiers protégés (motifs glob), dossiers gérés.
-3. **Publier** : la version devient la version courante du canal ; embed Discord optionnel (version, nouveautés, bouton vers le site).
-4. **Rollback** : « Rollback » sur une ancienne version la rétablit comme version courante ; les launchers s'y resynchronisent (fichiers modifiés restaurés, fichiers ajoutés retirés).
+1. **Première version — Versions → Nouvelle version → « Base complète »** : le ZIP de toute votre base. Mettez le SQL de départ (schéma, données) dans un dossier **`_sql/`** du ZIP (ex. `_sql/001_base.sql`).
+2. **Mises à jour — « Patch : fichiers modifiés »** : un ZIP avec **uniquement** les fichiers modifiés ou ajoutés, à leur emplacement (`resources/garage/client.lua`…), le SQL de la mise à jour dans **`_sql/`** (ex. `_sql/001_garage.sql`), et les fichiers à supprimer listés dans le formulaire ou dans **`fbm-delete.txt`**. Le site fusionne le patch sur la version de base.
+3. Dans les deux cas le site **reconstruit la base complète** : le ZIP téléchargé par les joueurs est prêt à lancer, avec le `server.cfg`, l'historique SQL (`sql/migrations/<version>/`) et **`sql/install.sql`** (toute la base de données à jour, à importer une fois).
+4. **Éditer** : titre, résumé, changelog (`NEW` / `FIX` / `IMPROVEMENT`, images). Les **détails techniques** (fichiers ajoutés / modifiés / supprimés, ressources touchées, SQL) sont ajoutés automatiquement aux patch notes.
+5. **Publier** (+ embed Discord optionnel) ; **Rollback** pour rétablir une version précédente.
+
+Côté serveurs des joueurs, `fbm update` affiche ces patch notes, **exécute le SQL** pas encore appliqué (via oxmysql, une seule fois par fichier) et installe les fichiers au redémarrage.
 
 ## Production
 
@@ -89,7 +93,7 @@ L'URL du site est **compilée** dans le launcher (https obligatoire en release).
 
 ## Mise à jour depuis txAdmin
 
-Copiez [`fivem/fbm-updater`](fivem/fbm-updater) dans votre base (ex. `resources/[fbm]/fbm-updater`, avec `config.json` → `api`). Chaque joueur crée un jeton sur *Mon compte*, l'ajoute dans son `server.cfg`, tape **`fbm update`** dans la console txAdmin (ou `/fbm update` en jeu) puis **redémarre** : seuls les fichiers modifiés sont téléchargés, la mise à jour s'applique au démarrage, ses configs restent intactes. Guide complet : **[fivem/fbm-updater/README.md](fivem/fbm-updater/README.md)**.
+Copiez [`fivem/fbm-updater`](fivem/fbm-updater) dans votre base (ex. `resources/[fbm]/fbm-updater`, avec `config.json` → `api`). Chaque joueur crée un jeton sur *Mon compte*, l'ajoute dans son `server.cfg`, tape **`fbm update`** dans la console txAdmin (ou `/fbm update` en jeu) puis **redémarre** : seuls les fichiers modifiés sont téléchargés, le SQL de la mise à jour est exécuté via oxmysql, les fichiers s'appliquent au démarrage, ses configs restent intactes. Guide complet : **[fivem/fbm-updater/README.md](fivem/fbm-updater/README.md)**.
 
 ## Tests
 
@@ -99,19 +103,19 @@ cd web      && npm run test:e2e      # bout-en-bout : vrai Next.js + PostgreSQL 
 cd web      && E2E_S3=1 npm run test:e2e   # idem avec un serveur S3 (ex. `moto_server -p 5555`, bucket fbm-test)
 cd launcher && cargo test -p fbm-core      # moteur de mise à jour
 cd launcher && cargo build --release -p fbm-core --bin fbm-cli && python3 e2e/run.py   # launcher ↔ serveur réel
-cd fivem/fbm-updater && npm test        # ressource txAdmin : moteur + harnais FiveM simulé
-python3 fivem/e2e/run.py                # ressource ↔ serveur réel, interopérabilité avec fbm-cli
+cd fivem/test && npm ci && npm test    # ressource txAdmin : moteur, SQL (MariaDB si disponible), harnais FiveM simulé
+python3 fivem/e2e/run.py                # parcours complet : base + patch, ZIP, install.sql, fbm update + SQL (MariaDB), launcher
 ```
 
 ## Ce qui a été vérifié — et ce qui ne l'a pas été
 
-**Exécuté et validé** pendant le développement : tests unitaires, e2e API (stockage local **et** S3 via `moto`), `next build`, build de production *standalone*, moteur du launcher (tests + scénario complet contre un vrai serveur : installation, mise à jour différentielle, rollback, réparation, maintenance, jeton révoqué, reprise après crash), **application Tauri compilée sur Linux et pilotée sous Xvfb** (connexion par boucle locale, installation et rollback par clic, captures d'écran), **ressource `fbm-updater`** (tests sous Node 22 et Node 16, scénario complet contre un vrai serveur, relais avec le launcher Rust dans les deux sens).
+**Exécuté et validé** pendant le développement : tests unitaires, e2e API (stockage local **et** S3 via `moto`), `next build`, build de production *standalone*, moteur du launcher (tests + scénario complet contre un vrai serveur : installation, mise à jour différentielle, rollback, réparation, maintenance, jeton révoqué, reprise après crash), **application Tauri compilée sur Linux et pilotée sous Xvfb** (connexion par boucle locale, installation et rollback par clic, captures d'écran), **ressource `fbm-updater`** (tests sous Node 22 et Node 16, scénario complet contre un vrai serveur, relais avec le launcher Rust dans les deux sens), **patchs et SQL** (fusion, `install.sql` importé dans un vrai MariaDB, exécution automatique du SQL des mises à jour, triggers avec `DELIMITER`).
 
 **Non vérifié ici** (à tester chez vous avant la mise en production) :
 
 * La **connexion Discord réelle** (OAuth2, lecture des rôles, bot) et l'**envoi réel des webhooks** : aucun accès à Discord depuis l'environnement de développement. Le code suit l'API Discord v10 ; les webhooks et les rôles sont couverts par des tests avec Discord simulé.
 * Le **`.exe` Windows / l'installateur NSIS** et le Gestionnaire d'informations d'identification Windows (`keyring`) : l'application n'a été compilée et exécutée que sous Linux. Le build Windows passe par le workflow GitHub fourni.
-* La ressource **`fbm-updater` dans un vrai FXServer / txAdmin** : les natives FiveM (commande, convars, chat, ordre de démarrage) sont simulées dans les tests. À valider sur un serveur de test avant vos joueurs, en particulier le fait qu'`ensure fbm-updater` placé en premier s'exécute avant les ressources suivantes.
+* La ressource **`fbm-updater` dans un vrai FXServer / txAdmin** : les natives FiveM (commande, convars, chat, ordre de démarrage) **et oxmysql** sont simulés dans les tests (le SQL, lui, tourne sur un vrai MariaDB). À valider sur un serveur de test avant vos joueurs, en particulier le fait qu'`ensure fbm-updater` placé en premier s'exécute avant les ressources suivantes.
 * **Docker / docker-compose** (pas de démon Docker disponible) — les étapes équivalentes (build standalone + `node server.js`) ont été exécutées.
 * Passage à l'échelle (milliers de joueurs simultanés, bases de plusieurs Go) : conçu pour (téléchargements directs depuis S3, blobs dédupliqués, upload en flux) mais non mesuré.
 

@@ -128,7 +128,7 @@ describe("patch", () => {
   });
 
   it("reconstruit un ZIP complet identique au manifeste", async () => {
-    const built = await buildArchive(v11, st);
+    const built = await buildArchive(v11, st, { version: "1.1.0", channel: "STABLE" });
     try {
       const entries = await new Promise<Map<string, string>>((resolve, reject) => {
         const out = new Map<string, string>();
@@ -149,8 +149,9 @@ describe("patch", () => {
           z.readEntry();
         });
       });
-      expect(entries.size).toBe(v11.files.length);
+      expect(entries.size).toBe(v11.files.length + 1);
       for (const f of v11.files) expect(entries.get(f.path)).toBe(f.sha256);
+      expect(entries.has(".fbm/state.json")).toBe(true); // installation reconnue par fbm update / le launcher
       expect(built.sha256).toMatch(/^[a-f0-9]{64}$/);
     } finally {
       await built.cleanup();

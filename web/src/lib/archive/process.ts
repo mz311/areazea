@@ -70,7 +70,8 @@ export async function processArchive(
   const zip = await openZip(zipPath);
   const tmp = await mkdtemp(path.join(tmpdir(), "fbm-extract-"));
   try {
-    const raw = (await readEntries(zip)).filter((e) => !e.fileName.endsWith("/"));
+    // .fbm/ (état d'installation présent dans les ZIP téléchargés depuis le site) est ignoré : on peut renvoyer un tel ZIP
+    const raw = (await readEntries(zip)).filter((e) => !e.fileName.endsWith("/") && !/^([^/]+\/)?\.fbm\//i.test(e.fileName));
     if (raw.length === 0) throw new ArchiveError("L'archive ne contient aucun fichier");
     if (raw.length > limits.maxFiles) throw new ArchiveError(`Trop de fichiers (${raw.length} > ${limits.maxFiles})`);
 

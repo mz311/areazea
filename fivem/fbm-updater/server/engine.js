@@ -254,9 +254,11 @@ class Api {
     return (await this.call("GET", "/api/launcher/me")).user;
   }
 
-  async latest(channel, version) {
+  /** Version cible + manifeste ; `from` (version installée) ajoute les patch notes intermédiaires (history). */
+  async latest(channel, version, from) {
     const q = new URLSearchParams({ channel: channel || "STABLE" });
     if (version) q.set("version", version);
+    if (from) q.set("from", from);
     const v = await this.call("GET", `/api/launcher/latest?${q}`);
     validateManifest(v.manifest);
     if (manifestDigest(v.manifest) !== v.manifestSha256) throw new FbmError("Manifeste altéré (empreinte incorrecte)", "integrity");
@@ -634,6 +636,192 @@ function applyPendingSync(dir, opts) {
   };
 }
 
+// ───────────────────────────── SQL ─────────────────────────────
+
+/** Contenu exécutable restant une fois les commentaires simples retirés (les commentaires exécutables « /*! » comptent comme du code). */
+function hasCode(s) {
+  let i = 0;
+  while (i < s.length) {
+    const c = s[i];
+    if (/\s/.test(c)) i++;
+    else if (c === "#" || (c === "-" && s[i + 1] === "-" && (i + 2 >= s.length || /\s/.test(s[i + 2])))) {
+      const nl = s.indexOf("\n", i);
+      i = nl < 0 ? s.length : nl + 1;
+    } else if (c === "/" && s[i + 1] === "*" && s[i + 2] !== "!") {
+      const end = s.indexOf("*/", i + 2);
+      i = end < 0 ? s.length : end + 2;
+    } else return true;
+  }
+  return false;
+}
+
+/**
+ * Découpe un script SQL en instructions comme le client `mysql` (chaînes, commentaires, DELIMITER).
+ * Même algorithme et mêmes cas de test que le site (web/src/lib/sql.ts).
+ */
+function splitSql(sql) {
+  const src = String(sql).replace(/^﻿/, "").replace(/\r\n?/g, "\n");
+  const statements = [];
+  let delimiter = ";";
+  let usesDelimiter = false;
+  let buf = "";
+  let i = 0;
+  let lineStart = true;
+  const flush = () => {
+    if (hasCode(buf)) statements.push(buf.trim());
+    buf = "";
+  };
+  while (i < src.length) {
+    const c = src[i];
+    if (lineStart) {
+      const m = /^[ \t]*delimiter[ \t]+(\S+)[ \t]*(?:\n|$)/i.exec(src.slice(i, i + 200));
+      if (m) {
+        if (hasCode(buf)) flush();
+        else buf = "";
+        delimiter = m[1];
+        usesDelimiter = true;
+        i += m[0].length;
+        lineStart = true;
+        continue;
+      }
+    }
+    lineStart = false;
+    if (c === "'" || c === '"' || c === "`") {
+      let j = i + 1;
+      while (j < src.length) {
+        if (src[j] === "\\" && c !== "`") j += 2;
+        else if (src[j] === c) {
+          if (src[j + 1] === c) j += 2;
+          else break;
+        } else j++;
+      }
+      buf += src.slice(i, j + 1);
+      i = j + 1;
+      continue;
+    }
+    if (c === "#" || (c === "-" && src[i + 1] === "-" && (i + 2 >= src.length || /\s/.test(src[i + 2])))) {
+      const nl = src.indexOf("\n", i);
+      const end = nl < 0 ? src.length : nl + 1;
+      buf += src.slice(i, end);
+      i = end;
+      lineStart = true;
+      continue;
+    }
+    if (c === "/" && src[i + 1] === "*") {
+      const close = src.indexOf("*/", i + 2);
+      const end = close < 0 ? src.length : close + 2;
+      buf += src.slice(i, end);
+      i = end;
+      continue;
+    }
+    if (src.startsWith(delimiter, i)) {
+      flush();
+      i += delimiter.length;
+      continue;
+    }
+    buf += c;
+    if (c === "\n") lineStart = true;
+    i++;
+  }
+  const trailing = hasCode(buf);
+  flush();
+  return { statements, trailing, usesDelimiter, endDelimiter: delimiter };
+}
+
+const LEDGER_TABLE = "fbm_migrations";
+/** Identique au registre créé par sql/install.sql (site). */
+const LEDGER_DDL =
+  "CREATE TABLE IF NOT EXISTS `fbm_migrations` (\n  `version` VARCHAR(64) NOT NULL,\n  `name` VARCHAR(191) NOT NULL,\n  `sha256` CHAR(64) NOT NULL,\n" +
+  "  `applied_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (`version`, `name`)\n)";
+
+const migKey = (m) => `${m.version}\u0000${m.name}`;
+
+/**
+ * État SQL du serveur pour un historique donné.
+ * db.query(sql, params) → Promise<rows> (oxmysql en jeu, mysql2 en test).
+ *  - ledger : null si la table fbm_migrations n'existe pas (base jamais initialisée par fbm)
+ *  - emptyDb : la base de données ne contient aucune table
+ */
+async function sqlStatus(db, migrations) {
+  let rows = null;
+  try {
+    rows = await db.query(`SELECT \`version\`, \`name\`, \`sha256\` FROM \`${LEDGER_TABLE}\``, []);
+  } catch (e) {
+    if (!/doesn't exist|1146|no such table|ER_NO_SUCH_TABLE/i.test(String(e && e.message))) throw sqlError(e, "lecture du registre fbm_migrations");
+  }
+  let emptyDb = false;
+  if (!rows) {
+    const r = await db.query("SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = DATABASE()", []);
+    emptyDb = Number(r && r[0] && r[0].n) === 0;
+  }
+  const done = new Map((rows || []).map((r) => [migKey(r), r.sha256]));
+  const list = migrations || [];
+  return {
+    ledger: rows ? rows.length : null,
+    emptyDb,
+    applied: list.filter((m) => done.has(migKey(m))),
+    pending: list.filter((m) => !done.has(migKey(m))),
+    /** déjà appliqué avec un contenu différent (fichier modifié après coup sur le site) */
+    changed: list.filter((m) => done.has(migKey(m)) && done.get(migKey(m)) !== m.sha256),
+  };
+}
+
+function sqlError(e, what) {
+  return new FbmError(`SQL (${what}) : ${e && e.message ? e.message : e}`, "sql");
+}
+
+/** Contenu d'un fichier SQL : préparé par la mise à jour en cours, sinon déjà présent dans la base ; SHA-256 vérifié. */
+function readMigration(dir, m) {
+  const candidates = [path.join(pendingDir(dir), "blobs", m.sha256), safeJoin(dir, m.path)];
+  for (const f of candidates) {
+    let buf;
+    try {
+      buf = fs.readFileSync(f);
+    } catch (e) {
+      continue;
+    }
+    if (crypto.createHash("sha256").update(buf).digest("hex") === m.sha256) return buf.toString("utf8");
+  }
+  throw new FbmError(`Fichier SQL ${m.path} absent ou modifié : lancez « fbm repair »`, "integrity");
+}
+
+/** Exécute les fichiers SQL dans l'ordre, instruction par instruction ; chaque fichier réussi est inscrit au registre. */
+async function runSql(dir, db, migrations, onFile) {
+  if (!migrations.length) return 0;
+  await db.query(LEDGER_DDL, []);
+  let n = 0;
+  for (const m of migrations) {
+    const { statements } = splitSql(readMigration(dir, m));
+    if (onFile) onFile(m, statements.length);
+    for (let i = 0; i < statements.length; i++) {
+      try {
+        await db.query(statements[i], []);
+      } catch (e) {
+        const excerpt = statements[i].replace(/\s+/g, " ").slice(0, 120);
+        throw new FbmError(
+          `SQL v${m.version}/${m.name}, instruction ${i + 1}/${statements.length} : ${e && e.message ? e.message : e}\n  → ${excerpt}` +
+            (i > 0 ? `\n  Les ${i} instruction(s) précédente(s) de ce fichier ont déjà été exécutées.` : ""),
+          "sql",
+        );
+      }
+    }
+    await db.query(`INSERT INTO \`${LEDGER_TABLE}\` (\`version\`, \`name\`, \`sha256\`) VALUES (?, ?, ?)`, [m.version, m.name, m.sha256]);
+    n++;
+  }
+  return n;
+}
+
+/** Inscrit des fichiers SQL comme déjà appliqués, sans les exécuter (base existante). */
+async function baselineSql(db, migrations) {
+  await db.query(LEDGER_DDL, []);
+  let n = 0;
+  for (const m of migrations) {
+    const r = await db.query(`INSERT IGNORE INTO \`${LEDGER_TABLE}\` (\`version\`, \`name\`, \`sha256\`) VALUES (?, ?, ?)`, [m.version, m.name, m.sha256]);
+    if (r && (r.affectedRows === undefined || r.affectedRows > 0)) n++;
+  }
+  return n;
+}
+
 // ───────────────────────────── utilitaires ─────────────────────────────
 
 /** Dossier de la base : parent du dossier « resources » qui contient la ressource. */
@@ -692,6 +880,12 @@ const FBM = {
   guessBaseDir,
   resourcesOf,
   formatBytes,
+  splitSql,
+  sqlStatus,
+  runSql,
+  baselineSql,
+  readMigration,
+  LEDGER_DDL,
   paths: { fbmDir, statePath, journalPath, pendingDir, pendingPath },
 };
 

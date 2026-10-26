@@ -6,7 +6,7 @@ const os = require("os");
 const path = require("path");
 const http = require("http");
 const crypto = require("crypto");
-const F = require("../server/engine.js");
+const F = require("../fbm-updater/server/engine.js");
 
 const sha = (s) => crypto.createHash("sha256").update(s).digest("hex");
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "fbm-js-"));
