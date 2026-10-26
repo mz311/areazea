@@ -60,6 +60,7 @@ ask() {
   printf -v "$__var" '%s' "$__v"
 }
 
+valid_email() { [[ "$1" =~ ^[A-Za-z0-9._%+-]+@([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$ ]]; }
 valid_domain() { [[ "$1" =~ ^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$ ]]; }
 # jeton / identifiant : caractères sûrs uniquement (la valeur est écrite dans un fichier .env)
 valid_token()  { [[ "$1" =~ ^[A-Za-z0-9._,-]+$ ]]; }
@@ -339,7 +340,7 @@ main() {
   [ -n "$DOMAIN" ] || die "Indiquez le domaine : --domain mabase.fr"
   DOMAIN=$(printf '%s' "$DOMAIN" | tr '[:upper:]' '[:lower:]' | sed -E 's#^https?://##; s#/.*$##')
   valid_domain "$DOMAIN" || die "Nom de domaine invalide : $DOMAIN"
-  if [ -n "$EMAIL" ] && ! [[ "$EMAIL" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]]; then die "Adresse e-mail invalide : $EMAIL"; fi
+  if [ -n "$EMAIL" ] && ! valid_email "$EMAIL"; then die "Adresse e-mail invalide : $EMAIL (une vraie adresse, sans espace ni symbole comme ~)"; fi
   step "Installation des composants"
   ensure_swap
   install_packages

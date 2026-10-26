@@ -52,6 +52,9 @@ eq "$(get_env "$W" APP_URL)" "https://autre.fr" "APP_URL mis à jour"
 echo "validation des saisies"
 valid_domain "mabase.fr" && valid_domain "sous.domaine.mabase.co.uk" || fail "domaine valide refusé"
 if valid_domain "pas un domaine" || valid_domain "http://x" || valid_domain "-a.fr" || valid_domain "a;rm -rf.fr"; then fail "domaine invalide accepté"; fi
+valid_email "moi.nom+fbm@mabase.fr" && valid_email "a@b.co" || fail "e-mail valide refusé"
+if valid_email 'votre@email.fr~' || valid_email "a b@x.fr" || valid_email "a@x" || valid_email 'a@x.fr;rm' || valid_email '@x.fr' || valid_email 'a@@x.fr'; then fail "e-mail invalide accepté"; fi
+echo "  ✓ e-mails : « votre@email.fr~ » et injections refusés"
 valid_token "AbC_123-x.y" && valid_token "111,222" || fail "jeton valide refusé"
 if valid_token 'a b' || valid_token 'a$(x)' || valid_token 'a"b' || valid_token 'a#b'; then fail "jeton dangereux accepté"; fi
 echo "  ✓ domaines et jetons : injections refusées"
