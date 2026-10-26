@@ -1,0 +1,9 @@
+{
+  "name": "fbm-updater",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Ressource FiveM : mises à jour de la base depuis txAdmin / en jeu",
+  "scripts": {
+    "test": "node --test test/engine.test.js test/resource.test.js"
+  }
+}

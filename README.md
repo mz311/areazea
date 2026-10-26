@@ -5,6 +5,7 @@ Plateforme complète pour distribuer **votre base FiveM** à votre communauté D
 * **Site** (Next.js / React / TypeScript / Tailwind / Framer Motion) — accueil, téléchargement, historique des versions, compte, **panel administrateur**.
 * **API** (routes Next.js sur Node, PostgreSQL + Prisma, stockage local ou **S3**) — connexion **Discord OAuth2**, rôles, liens de téléchargement temporaires, manifeste SHA-256, rollback, webhooks Discord.
 * **Launcher Windows** (Tauri 2 + moteur Rust) — installation, **mises à jour différentielles**, vérification SHA-256, sauvegarde / restauration automatique, réparation, protection de vos fichiers de configuration.
+* **Ressource FiveM `fbm-updater`** — les mêmes mises à jour **directement sur le serveur**, avec la commande `fbm update` dans la console **txAdmin** ou **en jeu**, appliquées au redémarrage.
 
 ```
 ┌─────────────┐  OAuth2   ┌───────────────────────────┐   ┌────────────┐
@@ -27,6 +28,7 @@ Plateforme complète pour distribuer **votre base FiveM** à votre communauté D
 | [`launcher/core`](launcher/core) | Moteur de mise à jour (Rust, sans dépendance UI) + CLI `fbm-cli` + tests |
 | [`launcher/src-tauri`](launcher/src-tauri) · [`launcher/ui`](launcher/ui) | Application Tauri (Windows) |
 | [`launcher/e2e`](launcher/e2e) | Test bout-en-bout launcher ↔ vrai serveur |
+| [`fivem/fbm-updater`](fivem/fbm-updater) | Ressource FiveM : `fbm update` depuis txAdmin / en jeu ([guide](fivem/fbm-updater/README.md)) |
 | [`deploy/`](deploy) · [`docker-compose.yml`](docker-compose.yml) | nginx, Docker |
 | [`docs/`](docs) | [Discord](docs/discord.md) · [Architecture & API](docs/architecture.md) · [Sécurité](docs/security.md) · [Launcher](docs/launcher.md) |
 
@@ -85,6 +87,10 @@ FBM_API_URL=https://base.example.com npx tauri build      # → target/release/b
 
 L'URL du site est **compilée** dans le launcher (https obligatoire en release). Le workflow GitHub [`release-launcher.yml`](.github/workflows/release-launcher.yml) produit l'installateur sur un runner Windows (tag `launcher-v1.0.0`, variable de dépôt `FBM_API_URL`). Déposez ensuite le `.exe` où vous voulez et renseignez son URL dans **Admin → Paramètres**. Détails, garanties de sécurité et CLI : **[docs/launcher.md](docs/launcher.md)**. Pour éviter l'alerte SmartScreen, **signez** l'exécutable (certificat de signature de code).
 
+## Mise à jour depuis txAdmin
+
+Copiez [`fivem/fbm-updater`](fivem/fbm-updater) dans votre base (ex. `resources/[fbm]/fbm-updater`, avec `config.json` → `api`). Chaque joueur crée un jeton sur *Mon compte*, l'ajoute dans son `server.cfg`, tape **`fbm update`** dans la console txAdmin (ou `/fbm update` en jeu) puis **redémarre** : seuls les fichiers modifiés sont téléchargés, la mise à jour s'applique au démarrage, ses configs restent intactes. Guide complet : **[fivem/fbm-updater/README.md](fivem/fbm-updater/README.md)**.
+
 ## Tests
 
 ```bash
@@ -93,16 +99,19 @@ cd web      && npm run test:e2e      # bout-en-bout : vrai Next.js + PostgreSQL 
 cd web      && E2E_S3=1 npm run test:e2e   # idem avec un serveur S3 (ex. `moto_server -p 5555`, bucket fbm-test)
 cd launcher && cargo test -p fbm-core      # moteur de mise à jour
 cd launcher && cargo build --release -p fbm-core --bin fbm-cli && python3 e2e/run.py   # launcher ↔ serveur réel
+cd fivem/fbm-updater && npm test        # ressource txAdmin : moteur + harnais FiveM simulé
+python3 fivem/e2e/run.py                # ressource ↔ serveur réel, interopérabilité avec fbm-cli
 ```
 
 ## Ce qui a été vérifié — et ce qui ne l'a pas été
 
-**Exécuté et validé** pendant le développement : tests unitaires, e2e API (stockage local **et** S3 via `moto`), `next build`, build de production *standalone*, moteur du launcher (tests + scénario complet contre un vrai serveur : installation, mise à jour différentielle, rollback, réparation, maintenance, jeton révoqué, reprise après crash), **application Tauri compilée sur Linux et pilotée sous Xvfb** (connexion par boucle locale, installation et rollback par clic, captures d'écran).
+**Exécuté et validé** pendant le développement : tests unitaires, e2e API (stockage local **et** S3 via `moto`), `next build`, build de production *standalone*, moteur du launcher (tests + scénario complet contre un vrai serveur : installation, mise à jour différentielle, rollback, réparation, maintenance, jeton révoqué, reprise après crash), **application Tauri compilée sur Linux et pilotée sous Xvfb** (connexion par boucle locale, installation et rollback par clic, captures d'écran), **ressource `fbm-updater`** (tests sous Node 22 et Node 16, scénario complet contre un vrai serveur, relais avec le launcher Rust dans les deux sens).
 
 **Non vérifié ici** (à tester chez vous avant la mise en production) :
 
 * La **connexion Discord réelle** (OAuth2, lecture des rôles, bot) et l'**envoi réel des webhooks** : aucun accès à Discord depuis l'environnement de développement. Le code suit l'API Discord v10 ; les webhooks et les rôles sont couverts par des tests avec Discord simulé.
 * Le **`.exe` Windows / l'installateur NSIS** et le Gestionnaire d'informations d'identification Windows (`keyring`) : l'application n'a été compilée et exécutée que sous Linux. Le build Windows passe par le workflow GitHub fourni.
+* La ressource **`fbm-updater` dans un vrai FXServer / txAdmin** : les natives FiveM (commande, convars, chat, ordre de démarrage) sont simulées dans les tests. À valider sur un serveur de test avant vos joueurs, en particulier le fait qu'`ensure fbm-updater` placé en premier s'exécute avant les ressources suivantes.
 * **Docker / docker-compose** (pas de démon Docker disponible) — les étapes équivalentes (build standalone + `node server.js`) ont été exécutées.
 * Passage à l'échelle (milliers de joueurs simultanés, bases de plusieurs Go) : conçu pour (téléchargements directs depuis S3, blobs dédupliqués, upload en flux) mais non mesuré.
 

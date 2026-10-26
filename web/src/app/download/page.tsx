@@ -1,10 +1,11 @@
-import { AlertTriangle, Copy, Download, LogIn, MonitorDown, Users } from "lucide-react";
+import { AlertTriangle, Copy, Download, LogIn, MonitorDown, Server, Users } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { DownloadButton } from "@/components/DownloadButton";
 import { Reveal } from "@/components/Reveal";
 import { Badge, PageHeader } from "@/components/ui";
 import { getSessionUser } from "@/lib/auth/session";
+import { env } from "@/lib/env";
 import { formatBytes, formatDate } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
 import { currentVersion } from "@/lib/versions";
@@ -109,6 +110,38 @@ export default async function DownloadPage() {
       ) : (
         <p className="card p-8 text-center text-zinc-500">Aucune version stable n&apos;a encore été publiée.</p>
       )}
+
+      <Reveal>
+        <section className="card p-6">
+          <div className="mb-4 flex items-center gap-3">
+            <div className="rounded-xl bg-neon-500/15 p-2.5 text-neon-300"><Server size={20} /></div>
+            <div>
+              <h2 className="text-lg font-extrabold text-white">Mettre à jour depuis txAdmin</h2>
+              <p className="text-sm text-zinc-400">Sur votre serveur, sans launcher : une commande dans la console txAdmin ou en jeu.</p>
+            </div>
+          </div>
+          <ol className="grid gap-4 text-sm text-zinc-300 md:grid-cols-3">
+            <li className="min-w-0">
+              <span className="font-semibold text-white">1. Créez un jeton</span> sur{" "}
+              <Link href="/account" className="text-neon-300 hover:underline">Mon compte</Link> (« Créer un jeton »).
+            </li>
+            <li className="min-w-0">
+              <span className="font-semibold text-white">2. Dans server.cfg</span>, avant vos autres ressources :
+              <code className="mt-2 block overflow-x-auto whitespace-pre rounded-lg bg-ink-900 px-3 py-2 text-xs text-neon-300">{`set fbm_api "${env().APP_URL}"
+set fbm_token "fvl_…"
+ensure fbm-updater   # avant les autres ensure`}</code>
+            </li>
+            <li className="min-w-0">
+              <span className="font-semibold text-white">3. Tapez</span> <code className="text-neon-300">fbm update</code> dans la console txAdmin (ou{" "}
+              <code className="text-neon-300">/fbm update</code> en jeu), puis <span className="font-semibold text-white">redémarrez le serveur</span> : la mise à jour s&apos;applique au démarrage.
+            </li>
+          </ol>
+          <p className="mt-4 text-xs text-zinc-500">
+            Seuls les fichiers modifiés sont téléchargés et vérifiés (SHA-256) ; votre server.cfg et vos fichiers de configuration ne sont jamais écrasés.
+            En jeu, la commande demande la permission <code>command.fbm</code> (ex. <code>add_ace group.admin command.fbm allow</code>).
+          </p>
+        </section>
+      </Reveal>
 
       <section>
         <h2 className="mb-4 text-xl font-extrabold text-white">Historique des versions</h2>
