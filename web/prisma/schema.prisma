@@ -106,6 +106,14 @@ model Version {
   publishedAt   DateTime?
   createdById   String?
   createdBy     User?         @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  /// FULL = archive complète ; PATCH = fichiers modifiés fusionnés sur la version parente
+  kind          String        @default("FULL")
+  /// Version précédente (base du patch et de l'historique SQL)
+  parentId      String?
+  parent        Version?      @relation("VersionParent", fields: [parentId], references: [id], onDelete: Restrict)
+  children      Version[]     @relation("VersionParent")
+  /// Résumé technique pour les patch notes : fichiers ajoutés / modifiés / supprimés, SQL de la version
+  diffSummary   Json?
   changes       Change[]
   downloads     Download[]
 

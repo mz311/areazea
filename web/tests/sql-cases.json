@@ -1,0 +1,12 @@
+[
+  { "name": "simple", "sql": "CREATE TABLE a (id INT);\nINSERT INTO a VALUES (1);", "statements": ["CREATE TABLE a (id INT)", "INSERT INTO a VALUES (1)"], "trailing": false },
+  { "name": "point-virgule dans les chaînes et identifiants", "sql": "INSERT INTO t (`a;b`, c) VALUES ('x;y', \"z;w\");\nSELECT 'it''s; ok';", "statements": ["INSERT INTO t (`a;b`, c) VALUES ('x;y', \"z;w\")", "SELECT 'it''s; ok'"], "trailing": false },
+  { "name": "antislash échappé", "sql": "INSERT INTO t VALUES ('a\\';b');\nSELECT 1;", "statements": ["INSERT INTO t VALUES ('a\\';b')", "SELECT 1"], "trailing": false },
+  { "name": "commentaires ignorés", "sql": "-- commentaire; avec point-virgule\n# autre; commentaire\n/* bloc ; */\nSELECT 1; -- fin\n", "statements": ["-- commentaire; avec point-virgule\n# autre; commentaire\n/* bloc ; */\nSELECT 1"], "trailing": false },
+  { "name": "fichier composé uniquement de commentaires", "sql": "-- rien\n/* toujours rien */\n", "statements": [], "trailing": false },
+  { "name": "commentaire exécutable de dump conservé", "sql": "/*!40101 SET NAMES utf8mb4 */;\nSELECT 1;", "statements": ["/*!40101 SET NAMES utf8mb4 */", "SELECT 1"], "trailing": false },
+  { "name": "dernière instruction sans point-virgule", "sql": "SELECT 1;\nSELECT 2\n", "statements": ["SELECT 1", "SELECT 2"], "trailing": true },
+  { "name": "DELIMITER pour un trigger", "sql": "DELIMITER $$\nCREATE TRIGGER trg BEFORE INSERT ON t FOR EACH ROW BEGIN SET NEW.a = 1; SET NEW.b = 2; END$$\nDELIMITER ;\nSELECT 3;", "statements": ["CREATE TRIGGER trg BEFORE INSERT ON t FOR EACH ROW BEGIN SET NEW.a = 1; SET NEW.b = 2; END", "SELECT 3"], "trailing": false, "usesDelimiter": true },
+  { "name": "fins de ligne Windows et BOM", "sql": "﻿SELECT 1;\r\nSELECT 2;\r\n", "statements": ["SELECT 1", "SELECT 2"], "trailing": false },
+  { "name": "tiret-tiret sans espace n'est pas un commentaire", "sql": "SELECT 5--1;\nSELECT 2;", "statements": ["SELECT 5--1", "SELECT 2"], "trailing": false }
+]

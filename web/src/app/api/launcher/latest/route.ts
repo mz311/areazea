@@ -3,7 +3,7 @@ import { route, HttpError } from "@/lib/api";
 import { prisma } from "@/lib/db";
 import { assertCanDownload } from "@/lib/access";
 import { assertNotMaintenance } from "@/lib/maintenance";
-import { currentVersion, getManifest } from "@/lib/versions";
+import { currentVersion, getManifest, historyBetween } from "@/lib/versions";
 import { manifestDigest } from "@/lib/manifest";
 
 export const runtime = "nodejs";
@@ -11,6 +11,8 @@ export const runtime = "nodejs";
 const query = z.object({
   channel: z.enum(["STABLE", "BETA"]).default("STABLE"),
   version: z.string().max(40).optional(),
+  /** Version installée : renvoie les patch notes de toutes les versions intermédiaires. */
+  from: z.string().max(40).optional(),
 });
 
 /**
@@ -27,6 +29,7 @@ export const GET = route({ auth: "bearer", rate: { name: "l-latest", limit: 60, 
   assertCanDownload(user!, v);
   const changes = await prisma.change.findMany({ where: { versionId: v.id }, orderBy: { position: "asc" } });
   const manifest = getManifest(v);
+  const { relation, history } = await historyBetween(v, q.from ? q.from.replace(/^v/i, "") : null);
   return {
     version: v.version,
     channel: v.channel,
@@ -37,6 +40,8 @@ export const GET = route({ auth: "bearer", rate: { name: "l-latest", limit: 60, 
     fileCount: v.fileCount,
     manifestSha256: manifestDigest(manifest),
     changes: changes.map((c) => ({ type: c.type, text: c.text })),
+    relation,
+    history,
     manifest,
   };
 });

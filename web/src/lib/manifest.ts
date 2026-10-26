@@ -6,12 +6,24 @@ export interface ManifestFile {
   size: number;
 }
 
+/** Fichier SQL d'une version, exécuté une seule fois par serveur, dans l'ordre de l'historique. */
+export interface Migration {
+  version: string;
+  name: string;
+  /** Emplacement dans la base : sql/migrations/<version>/<name> */
+  path: string;
+  sha256: string;
+  size: number;
+}
+
 export interface Manifest {
   files: ManifestFile[];
   /** Dossiers racine dont le launcher peut supprimer les fichiers obsolètes qu'il a lui-même installés. */
   managedDirs: string[];
   /** Motifs glob des fichiers de configuration utilisateur : jamais écrasés, jamais supprimés. */
   protected: string[];
+  /** Historique SQL complet jusqu'à cette version (de la plus ancienne à la plus récente). Hors empreinte. */
+  migrations?: Migration[];
 }
 
 export const DEFAULT_PROTECTED = [
@@ -114,5 +126,6 @@ export function parseManifest(json: unknown): Manifest {
     files: m.files,
     managedDirs: Array.isArray(m.managedDirs) ? m.managedDirs : [],
     protected: Array.isArray(m.protected) ? m.protected : [],
+    migrations: Array.isArray(m.migrations) ? m.migrations : [],
   };
 }

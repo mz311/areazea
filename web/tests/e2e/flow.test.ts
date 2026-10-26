@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
+import yauzl from "yauzl";
 import { S3Storage } from "@/lib/storage/s3";
 import { makeZip, makeZipWithRawName } from "../helpers";
 
@@ -62,6 +63,29 @@ async function api(method: string, p: string, o: { as?: keyof typeof tokens; bod
     json = JSON.parse(text);
   } catch {}
   return { status: res.status, json, text, headers: res.headers };
+}
+
+/** Contenu d'un ZIP : chemin → texte. */
+function unzip(buf: Buffer): Promise<Map<string, string>> {
+  return new Promise((resolve, reject) => {
+    const out = new Map<string, string>();
+    yauzl.fromBuffer(buf, { lazyEntries: true }, (err, z) => {
+      if (err || !z) return reject(err);
+      z.on("entry", (e: yauzl.Entry) =>
+        z.openReadStream(e, (er, s) => {
+          if (er || !s) return reject(er);
+          const chunks: Buffer[] = [];
+          s.on("data", (c: Buffer) => chunks.push(c));
+          s.on("end", () => {
+            out.set(e.fileName, Buffer.concat(chunks).toString("utf8"));
+            z.readEntry();
+          });
+        }),
+      );
+      z.on("end", () => resolve(out));
+      z.readEntry();
+    });
+  });
 }
 
 async function upload(version: string, files: Record<string, string>, qs = "") {
@@ -435,5 +459,93 @@ describe("annonces, stats, audit, limitation de débit", () => {
     }
     expect(last).toBe(429);
     expect(Number(retry)).toBeGreaterThan(0);
+  });
+});
+
+describe("patchs : fichiers modifiés + SQL → base complète prête à lancer", () => {
+  let vipToken: string;
+  const BASE_SQL = "CREATE TABLE IF NOT EXISTS users (id INT PRIMARY KEY);\nINSERT IGNORE INTO users VALUES (1);";
+
+  it("base complète 3.0.0 avec _sql/ : le ZIP contient sql/install.sql et l'historique, pas _sql/", async () => {
+    const up = await upload("3.0.0", {
+      "server.cfg": "ensure core",
+      "resources/core/fxmanifest.lua": "fx",
+      "resources/core/main.lua": "print('v3')",
+      "resources/old/fxmanifest.lua": "old",
+      "_sql/001_base.sql": BASE_SQL,
+    });
+    expect(up.status).toBe(200);
+    expect(up.json).toMatchObject({ kind: "FULL", migrations: [{ name: "001_base.sql" }] });
+    await api("POST", `/api/admin/versions/${up.json.id}/publish`, { as: "admin", body: { notifyDiscord: false } });
+    vipToken = (await api("POST", "/api/account/tokens", { as: "vip", body: { name: "patch" } })).json.token;
+  });
+
+  it("patch 3.1.0 : seulement les fichiers modifiés, un SQL et des suppressions", async () => {
+    const zip = await makeZip({
+      "resources/core/main.lua": "print('v3.1')",
+      "resources/garage/fxmanifest.lua": "garage",
+      "_sql/002_garage.sql": "CREATE TABLE IF NOT EXISTS garages (id INT);",
+    });
+    const r = await api("POST", `/api/admin/versions/upload?version=3.1.0&mode=patch&deletes=${encodeURIComponent("resources/old\nresources/nexiste-pas")}`, {
+      as: "admin",
+      raw: await readFile(zip),
+      headers: { "content-type": "application/zip" },
+    });
+    expect(r.status).toBe(200);
+    expect(r.json).toMatchObject({ kind: "PATCH", parent: "3.0.0", deleted: 1, unmatchedDeletes: ["resources/nexiste-pas"], migrations: [{ name: "002_garage.sql" }] });
+    expect(r.json.diff).toMatchObject({ against: "3.0.0", added: 2, modified: 2, removed: 1 }); // + garage, migration 3.1.0 ; ~ main.lua, install.sql ; − old
+    await api("PUT", `/api/admin/versions/${r.json.id}`, { as: "admin", body: { title: "Garage", changes: [{ type: "NEW", text: "Garage" }] } });
+    expect((await api("POST", `/api/admin/versions/${r.json.id}/publish`, { as: "admin", body: { notifyDiscord: false } })).status).toBe(200);
+  });
+
+  it("le ZIP téléchargé est la base complète à jour (fichiers, server.cfg, SQL complet)", async () => {
+    const link = await api("POST", "/api/download/3.1.0/link", { as: "vip" });
+    expect(link.status).toBe(200);
+    const buf = Buffer.from(await (await fetch(link.json.url)).arrayBuffer());
+    expect(sha(buf)).toBe(link.json.sha256);
+    const files = await unzip(buf);
+    expect(files.get("server.cfg")).toBe("ensure core");
+    expect(files.get("resources/core/main.lua")).toBe("print('v3.1')");
+    expect(files.get("resources/core/fxmanifest.lua")).toBe("fx");
+    expect(files.get("resources/garage/fxmanifest.lua")).toBe("garage");
+    expect([...files.keys()].some((p) => p.startsWith("resources/old/"))).toBe(false);
+    expect([...files.keys()].some((p) => p.startsWith("_sql/"))).toBe(false);
+    expect(files.get("sql/migrations/3.0.0/001_base.sql")).toBe(BASE_SQL);
+    const install = files.get("sql/install.sql")!;
+    expect(install.indexOf("CREATE TABLE IF NOT EXISTS users")).toBeLessThan(install.indexOf("CREATE TABLE IF NOT EXISTS garages"));
+    expect(install).toMatch(/\('3\.1\.0', '002_garage\.sql'/);
+  });
+
+  it("API du launcher : historique SQL et patch notes depuis la version installée", async () => {
+    const r = await api("GET", "/api/launcher/latest?from=3.0.0", { bearer: vipToken });
+    expect(r.json.version).toBe("3.1.0");
+    expect(r.json.relation).toBe("upgrade");
+    expect(r.json.history).toEqual([expect.objectContaining({ version: "3.1.0", title: "Garage", changes: [{ type: "NEW", text: "Garage" }], sql: ["002_garage.sql"] })]);
+    expect(r.json.manifest.migrations.map((m: { version: string; name: string }) => `${m.version}/${m.name}`)).toEqual(["3.0.0/001_base.sql", "3.1.0/002_garage.sql"]);
+    expect((await api("GET", "/api/launcher/latest?from=3.1.0", { bearer: vipToken })).json.relation).toBe("same");
+    const down = await api("GET", "/api/launcher/latest?version=3.0.0&from=3.1.0", { bearer: vipToken });
+    expect(down.json.relation).toBe("downgrade");
+    // les fichiers SQL font partie du manifeste : téléchargeables par le launcher / fbm update
+    const mig = r.json.manifest.migrations[1];
+    const urls = await api("POST", "/api/launcher/blobs", { bearer: vipToken, body: { version: "3.1.0", hashes: [mig.sha256] } });
+    expect(urls.status).toBe(200);
+  });
+
+  it("page Mises à jour : détails techniques et SQL", async () => {
+    const page = await (await fetch(BASE + "/updates", { headers: { cookie: cookie("vip") } })).text();
+    expect(page).toContain("Détails techniques");
+    expect(page).toContain("002_garage.sql");
+    expect(page).toContain("CREATE TABLE IF NOT EXISTS garages");
+    const anon = await (await fetch(BASE + "/updates")).text();
+    expect(anon).toContain("002_garage.sql");
+    expect(anon).not.toContain("CREATE TABLE IF NOT EXISTS garages"); // contenu réservé aux comptes ayant accès
+  });
+
+  it("refus : patch sans base, fichier généré dans le patch, suppression d'une version qui sert de base", async () => {
+    const bad = await upload("3.2.0", { "sql/install.sql": "DROP DATABASE x;" }, "&mode=patch");
+    expect(bad.status).toBe(422);
+    const versions = (await api("GET", "/api/admin/versions", { as: "admin" })).json.versions;
+    const v300 = versions.find((v: any) => v.version === "3.0.0");
+    expect((await api("DELETE", `/api/admin/versions/${v300.id}`, { as: "admin" })).json.code).toBe("has_children");
   });
 });

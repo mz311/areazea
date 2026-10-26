@@ -4,7 +4,9 @@ import { ArrowDown, ArrowUp, ImagePlus, Loader2, Plus, Rocket, Save, Trash2 } fr
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { TechDetails, type SqlFile } from "@/components/TechDetails";
 import { Badge, Stat } from "@/components/ui";
+import type { DiffSummary } from "@/lib/release";
 import { apiFetch, uploadRaw } from "@/lib/client";
 import { formatBytes, formatDate } from "@/lib/format";
 import { Feedback } from "./Feedback";
@@ -32,7 +34,11 @@ interface Detail {
     archiveSha256: string | null;
     publishedAt: string | null;
     changes: Change[];
+    kind: "FULL" | "PATCH";
+    parent: string | null;
+    diffSummary: DiffSummary | null;
   };
+  sql: SqlFile[];
   manifest: { managedDirs: string[]; protected: string[]; files: { path: string; sha256: string; size: number }[]; truncated: boolean };
   diff: { against: string | null; added: number; modified: number; removed: number; downloadSize: number };
 }
@@ -148,6 +154,7 @@ export function VersionEditor({ id }: { id: string }) {
         <h1 className="gradient-text text-3xl font-extrabold">v{v.version}</h1>
         {draft ? <Badge kind="DRAFT" /> : v.isCurrent ? <Badge kind="CURRENT" /> : <Badge kind="MEMBER">Publiée</Badge>}
         {v.channel === "BETA" && <Badge kind="BETA" />}
+        <span className="text-sm text-zinc-500">{v.kind === "PATCH" ? `Patch sur v${v.parent}` : v.parent ? `Base complète (après v${v.parent})` : "Base complète"}</span>
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -156,7 +163,8 @@ export function VersionEditor({ id }: { id: string }) {
         <Stat label={d.diff.against ? `Changements vs v${d.diff.against}` : "Changements"} value={`+${d.diff.added} ~${d.diff.modified} −${d.diff.removed}`} />
         <Stat label="À télécharger (launcher)" value={formatBytes(d.diff.downloadSize)} hint="mise à jour différentielle" />
       </div>
-      {v.archiveSha256 && <p className="break-all text-xs text-zinc-500">SHA-256 du ZIP : <code className="text-neon-300">{v.archiveSha256}</code></p>}
+      {v.archiveSha256 && <p className="break-all text-xs text-zinc-500">SHA-256 du ZIP complet : <code className="text-neon-300">{v.archiveSha256}</code></p>}
+      <TechDetails summary={v.diffSummary} sql={d.sql} />
 
       <Feedback error={error} ok={ok} />
 
