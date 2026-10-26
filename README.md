@@ -30,8 +30,8 @@ Plateforme complète pour distribuer **votre base FiveM** à votre communauté D
 | [`launcher/e2e`](launcher/e2e) | Test bout-en-bout launcher ↔ vrai serveur |
 | [`fivem/fbm-updater`](fivem/fbm-updater) | Ressource FiveM : `fbm update` depuis txAdmin / en jeu, SQL automatique ([guide](fivem/fbm-updater/README.md)) |
 | [`fivem/test`](fivem/test) · [`fivem/e2e`](fivem/e2e) | Tests de la ressource (harnais FiveM simulé, MariaDB réel) et parcours complet |
-| [`deploy/`](deploy) · [`docker-compose.yml`](docker-compose.yml) | nginx, Docker |
-| [`docs/`](docs) | [Discord](docs/discord.md) · [Architecture & API](docs/architecture.md) · [Sécurité](docs/security.md) · [Launcher](docs/launcher.md) |
+| [`deploy/`](deploy) · [`docker-compose.yml`](docker-compose.yml) | Installation en une commande sur VPS (Caddy + HTTPS), mise à jour, sauvegardes, nginx, Docker |
+| [`docs/`](docs) | [Mise en ligne (VPS)](docs/deploy.md) · [Discord](docs/discord.md) · [Architecture & API](docs/architecture.md) · [Sécurité](docs/security.md) · [Launcher](docs/launcher.md) |
 
 ## Démarrage rapide (développement)
 
@@ -69,6 +69,14 @@ Côté serveurs des joueurs, `fbm update` affiche ces patch notes, **exécute le
 
 ## Production
 
+**Sur un VPS (IONOS ou autre, Ubuntu)** — une commande, HTTPS automatique, secrets générés, sauvegardes : **[docs/deploy.md](docs/deploy.md)**.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mz311/areazea/claude/disponibilite-neg8vu/deploy/install.sh | sudo bash -s -- --domain mabase.fr
+```
+
+Ou à la main avec Docker :
+
 ```bash
 cp web/.env.example web/.env       # APP_URL en https, secrets, Discord, stockage…
 docker compose up -d --build       # PostgreSQL + migrations + site (127.0.0.1:3000)
@@ -77,7 +85,7 @@ docker compose up -d --build       # PostgreSQL + migrations + site (127.0.0.1:3
 Placez **nginx** (ou Caddy/Traefik) devant, avec HTTPS : voir [`deploy/nginx.conf`](deploy/nginx.conf) (taille d'upload, délais, `X-Real-IP`). Sans Docker : `npm ci && npm run build && npx prisma migrate deploy && node .next/standalone/server.js` (copier `.next/static` dans `.next/standalone/.next/static`).
 
 * **Stockage S3** (R2, MinIO, S3…) : `STORAGE_DRIVER=s3` + `S3_*`. Les fichiers restent **privés** ; les joueurs reçoivent des liens présignés de `DOWNLOAD_URL_TTL_SECONDS` secondes. Si `S3_ENDPOINT` est un nom interne, renseignez `S3_PUBLIC_ENDPOINT`.
-* **Sauvegardes** : base PostgreSQL **et** stockage (blobs + archives). Le manifeste d'une version est dans la base ; les fichiers dans le stockage.
+* **Sauvegardes** : base PostgreSQL **et** stockage (blobs + archives) — `deploy/backup.sh`. Le manifeste d'une version est dans la base ; les fichiers dans le stockage.
 * **Nettoyage** : Admin → Tableau de bord → « Nettoyage du stockage » supprime les fichiers qu'aucune version ne référence plus.
 * **Plusieurs instances** : la limitation de débit est en mémoire (par instance) — remplacez `src/lib/rate-limit.ts` par Redis si vous répartissez la charge.
 
@@ -116,7 +124,7 @@ python3 fivem/e2e/run.py                # parcours complet : base + patch, ZIP, 
 * La **connexion Discord réelle** (OAuth2, lecture des rôles, bot) et l'**envoi réel des webhooks** : aucun accès à Discord depuis l'environnement de développement. Le code suit l'API Discord v10 ; les webhooks et les rôles sont couverts par des tests avec Discord simulé.
 * Le **`.exe` Windows / l'installateur NSIS** et le Gestionnaire d'informations d'identification Windows (`keyring`) : l'application n'a été compilée et exécutée que sous Linux. Le build Windows passe par le workflow GitHub fourni.
 * La ressource **`fbm-updater` dans un vrai FXServer / txAdmin** : les natives FiveM (commande, convars, chat, ordre de démarrage) **et oxmysql** sont simulés dans les tests (le SQL, lui, tourne sur un vrai MariaDB). À valider sur un serveur de test avant vos joueurs, en particulier le fait qu'`ensure fbm-updater` placé en premier s'exécute avant les ressources suivantes.
-* **Docker / docker-compose** (pas de démon Docker disponible) — les étapes équivalentes (build standalone + `node server.js`) ont été exécutées.
+* **Docker / docker-compose** (pas de démon Docker disponible) et **`deploy/install.sh` sur un vrai VPS** : validés par morceaux — syntaxe et `shellcheck`, génération de la configuration (acceptée par le site en production), Caddyfile validé par Caddy, `docker compose config`, build du site sans `.env`, démarrage standalone. La construction de l'image Docker elle-même et l'installation complète sur un VPS n'ont pas pu être exécutées ici (pas de démon Docker, réseau restreint) : voir docs/deploy.md.
 * Passage à l'échelle (milliers de joueurs simultanés, bases de plusieurs Go) : conçu pour (téléchargements directs depuis S3, blobs dédupliqués, upload en flux) mais non mesuré.
 
 ## Licence
